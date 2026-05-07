@@ -1,12 +1,20 @@
-// 🔥 CONFIG FIREBASE
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "REMPLACE_PAR_TON_API_KEY",
-  authDomain: "REMPLACE.firebaseapp.com",
-  projectId: "REMPLACE_PROJECT_ID",
-  storageBucket: "REMPLACE.appspot.com",
-  messagingSenderId: "REMPLACE",
-  appId: "REMPLACE"
+  apiKey: "AIzaSyDhqKmCJJx5ScXUxaoip1eMiy10P0BvD9U",
+  authDomain: "marmite-bleue.firebaseapp.com",
+  projectId: "marmite-bleue",
+  storageBucket: "marmite-bleue.firebasestorage.app",
+  messagingSenderId: "938472624829",
+  appId: "1:938472624829:web:edd7453c2589c820dfddd4"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
 firebase.initializeApp(firebaseConfig);
 
