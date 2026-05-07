@@ -499,53 +499,49 @@ async function soumettreAvis() {
 // ANALYSE IA (Claude API)
 // ============================================================
 async function analyserAvisIA(texte, note) {
-  const GEMINI_KEY = "AIzaSyA8d1EFgfQWMjwjW0lzvCH0Pt_PYL-SVNw";
+  const GROQ_KEY = "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";
 
   const prompt = `Tu es un expert en restauration. Analyse cet avis Google d un restaurant de moules-frites (La Marmite Bleue, Saint-Pierre-la-Mer).
 Avis (note ${note}/5) : "${texte}"
 Reponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou apres :
 {"sentiment":"positif","resume":"resume en 1 phrase max 20 mots","motsCles":["mot1","mot2","mot3"],"reponse":"Reponse courtoise 2-3 phrases en francais"}`;
 
-  console.log("🤖 Appel Gemini...");
+  console.log("🤖 Appel Groq...");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    }
-  );
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${GROQ_KEY}`
+    },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      temperature: 0.3,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
 
-  console.log("📡 Statut Gemini:", response.status, response.statusText);
+  console.log("📡 Statut Groq:", response.status, response.statusText);
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("❌ Erreur Gemini HTTP:", errText);
-    throw new Error("Gemini HTTP " + response.status);
+    console.error("❌ Erreur Groq HTTP:", errText);
+    throw new Error("Groq HTTP " + response.status);
   }
 
   const data = await response.json();
-  console.log("📦 Réponse Gemini brute:", JSON.stringify(data).substring(0, 300));
+  console.log("📦 Réponse Groq brute:", JSON.stringify(data).substring(0, 300));
 
-  if (!data.candidates || !data.candidates[0]) {
-    console.error("❌ Pas de candidates dans la réponse:", data);
-    throw new Error("Pas de réponse Gemini");
-  }
-
-  const rawText = data.candidates[0].content.parts[0].text.trim();
-  console.log("📝 Texte Gemini:", rawText.substring(0, 200));
+  const rawText = data.choices[0].message.content.trim();
+  console.log("📝 Texte Groq:", rawText.substring(0, 200));
 
   const clean = rawText.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
 
-  // Normaliser le sentiment
   const s = (parsed.sentiment || "").toLowerCase();
   parsed.sentiment = s.includes("pos") ? "positif" : s.includes("neg") ? "negatif" : "neutre";
 
-  console.log("✅ Analyse Gemini OK:", parsed.sentiment);
+  console.log("✅ Analyse Groq OK:", parsed.sentiment);
   return parsed;
 }
 
