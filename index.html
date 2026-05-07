@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard V5 Cloud</title>
+<link rel="stylesheet" href="style.css">
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<h1>🍲 Dashboard Cloud</h1>
+
+<div class="card">
+<input id="resto" placeholder="Restaurant">
+<input id="clients" type="number" placeholder="Clients">
+<input id="avis" type="number" placeholder="Avis">
+<input id="note" type="number" step="0.1" placeholder="Note">
+<input id="attente" type="number" placeholder="Attente">
+<input id="employe" placeholder="Employé">
+
+<button onclick="analyser()">Analyser</button>
+</div>
+
+<div class="card" id="resultats"></div>
+
+<div class="card">
+<canvas id="chart"></canvas>
+</div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
