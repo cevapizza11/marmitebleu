@@ -499,7 +499,7 @@ async function soumettreAvis() {
 // ANALYSE IA (Claude API)
 // ============================================================
 async function analyserAvisIA(texte, note) {
-  const GEMINI_KEY = "AIzaSyBJrJAwCr4r4gY6VTHpaGY0acK2fgborSo";
+  const GEMINI_KEY = "AIzaSyA8d1EFgfQWMjwjW0lzvCH0Pt_PYL-SVNw";
 
   const prompt = `Tu es un expert en restauration. Analyse cet avis Google d un restaurant de moules-frites (La Marmite Bleue, Saint-Pierre-la-Mer).
 Avis (note ${note}/5) : "${texte}"
