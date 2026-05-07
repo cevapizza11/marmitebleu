@@ -2,10 +2,12 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Dashboard V5 Cloud</title>
+<title>Dashboard V6</title>
+
 <link rel="stylesheet" href="style.css">
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,7 +15,17 @@
 
 <body>
 
-<h1>🍲 Dashboard Cloud</h1>
+<h1>🍲 Dashboard Pro V6</h1>
+
+<!-- LOGIN -->
+<div class="card" id="loginBox">
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Mot de passe">
+<button onclick="login()">Connexion</button>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
 
 <div class="card">
 <input id="resto" placeholder="Restaurant">
@@ -24,15 +36,23 @@
 <input id="employe" placeholder="Employé">
 
 <button onclick="analyser()">Analyser</button>
+<button onclick="logout()">Déconnexion</button>
 </div>
 
 <div class="card" id="resultats"></div>
 
 <div class="card">
+<h3>📊 Dashboard</h3>
 <canvas id="chart"></canvas>
 </div>
 
-<script src="app.js"></script>
+<div class="card">
+<h3>👥 Équipe</h3>
+<div id="equipe"></div>
+</div>
 
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>

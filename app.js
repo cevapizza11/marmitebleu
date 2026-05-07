@@ -10,19 +10,46 @@ const firebaseConfig = {
 
 
 firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
 const db = firebase.firestore();
 
 let chart;
 
+// LOGIN
+function login() {
+  auth.signInWithEmailAndPassword(email.value, password.value)
+    .catch(() => alert("Erreur login"));
+}
+
+// LOGOUT
+function logout() {
+  auth.signOut();
+}
+
+// SESSION
+auth.onAuthStateChanged(user => {
+  if (user) {
+    loginBox.style.display = "none";
+    app.style.display = "block";
+    charger();
+  } else {
+    loginBox.style.display = "block";
+    app.style.display = "none";
+  }
+});
+
+// ANALYSE
 async function analyser() {
 
   let data = {
-    resto: document.getElementById("resto").value,
+    resto: resto.value,
     clients: +clients.value,
     avis: +avis.value,
     note: +note.value,
     attente: +attente.value,
     employe: employe.value,
+    user: auth.currentUser.email,
     date: new Date()
   };
 
@@ -35,6 +62,7 @@ async function analyser() {
   charger();
 }
 
+// RESULTAT
 function afficher(d) {
 
   let alertes = [];
@@ -45,16 +73,24 @@ function afficher(d) {
 
   if (alertes.length === 0) alertes.push("✅ OK");
 
-  document.getElementById("resultats").innerHTML = `
+  resultats.innerHTML = `
     <p>Score : ${d.score}</p>
     <ul>${alertes.map(a=>`<li>${a}</li>`).join("")}</ul>
   `;
 }
 
+// LOAD DATA
 async function charger() {
 
   let snapshot = await db.collection("stats").get();
   let data = snapshot.docs.map(doc => doc.data());
+
+  majGraph(data);
+  majEquipe(data);
+}
+
+// GRAPH
+function majGraph(data) {
 
   let notes = data.map(d => d.note);
 
@@ -69,4 +105,17 @@ async function charger() {
   });
 }
 
-charger();
+// TEAM
+function majEquipe(data) {
+
+  let eq = {};
+
+  data.forEach(d => {
+    if (!d.employe) return;
+    eq[d.employe] = (eq[d.employe] || 0) + 1;
+  });
+
+  equipe.innerHTML = Object.entries(eq)
+    .map(([n,c])=>`<p>${n} : ${c}</p>`)
+    .join("");
+}
