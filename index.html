@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Dashboard V6</title>
+<title>Marmite Bleue V8</title>
 
 <link rel="stylesheet" href="style.css">
 
@@ -15,40 +15,45 @@
 
 <body>
 
-<h1>🍲 Dashboard Pro V6</h1>
+<h1>🍲 Marmite Dashboard</h1>
 
-<!-- LOGIN -->
 <div class="card" id="loginBox">
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Mot de passe">
 <button onclick="login()">Connexion</button>
 </div>
 
-<!-- APP -->
 <div id="app" style="display:none;">
 
+<div class="card highlight">
+<h2 id="score"></h2>
+<p id="resume"></p>
+</div>
+
 <div class="card">
-<input id="resto" placeholder="Restaurant">
 <input id="clients" type="number" placeholder="Clients">
 <input id="avis" type="number" placeholder="Avis">
 <input id="note" type="number" step="0.1" placeholder="Note">
 <input id="attente" type="number" placeholder="Attente">
 <input id="employe" placeholder="Employé">
 
-<button onclick="analyser()">Analyser</button>
+<button onclick="analyser()">Analyser journée</button>
 <button onclick="logout()">Déconnexion</button>
 </div>
 
-<div class="card" id="resultats"></div>
-
 <div class="card">
-<h3>📊 Dashboard</h3>
-<canvas id="chart"></canvas>
+<h3>🚨 Alertes</h3>
+<div id="alertes"></div>
 </div>
 
 <div class="card">
-<h3>👥 Équipe</h3>
-<div id="equipe"></div>
+<h3>🧠 Actions recommandées</h3>
+<div id="actions"></div>
+</div>
+
+<div class="card">
+<h3>📊 Performance</h3>
+<canvas id="chart"></canvas>
 </div>
 
 </div>

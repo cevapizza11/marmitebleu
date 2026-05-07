@@ -8,7 +8,6 @@ const firebaseConfig = {
   appId: "1:938472624829:web:edd7453c2589c820dfddd4"
 };
 
-
 firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
@@ -19,10 +18,9 @@ let chart;
 // LOGIN
 function login() {
   auth.signInWithEmailAndPassword(email.value, password.value)
-    .catch(() => alert("Erreur login"));
+    .catch(()=>alert("Erreur login"));
 }
 
-// LOGOUT
 function logout() {
   auth.signOut();
 }
@@ -43,13 +41,11 @@ auth.onAuthStateChanged(user => {
 async function analyser() {
 
   let data = {
-    resto: resto.value,
     clients: +clients.value,
     avis: +avis.value,
     note: +note.value,
     attente: +attente.value,
     employe: employe.value,
-    user: auth.currentUser.email,
     date: new Date()
   };
 
@@ -62,35 +58,48 @@ async function analyser() {
   charger();
 }
 
-// RESULTAT
+// MOTEUR INTELLIGENT
 function afficher(d) {
 
   let alertes = [];
+  let actions = [];
 
-  if (d.note < 4.5) alertes.push("⚠️ Note faible");
-  if (d.taux < 5) alertes.push("⚠️ Peu d’avis");
-  if (d.attente > 5) alertes.push("⚠️ Attente longue");
+  if (d.note < 4.5) {
+    alertes.push("Note faible");
+    actions.push("Former équipe + contrôle qualité");
+  }
 
-  if (alertes.length === 0) alertes.push("✅ OK");
+  if (d.taux < 5) {
+    alertes.push("Pas assez d’avis");
+    actions.push("QR code + demande client systématique");
+  }
 
-  resultats.innerHTML = `
-    <p>Score : ${d.score}</p>
-    <ul>${alertes.map(a=>`<li>${a}</li>`).join("")}</ul>
-  `;
+  if (d.attente > 5) {
+    alertes.push("Attente trop longue");
+    actions.push("Renforcer production / anticiper rush");
+  }
+
+  if (alertes.length === 0) {
+    alertes.push("RAS");
+    actions.push("Maintenir performance");
+  }
+
+  // 💰 estimation CA (simple)
+  let panierMoyen = 12;
+  let ca = d.clients * panierMoyen;
+
+  score.innerText = `Score ${d.score}`;
+  resume.innerText = `CA estimé : ${ca}€ | Avis : ${d.taux}%`;
+
+  alertesDiv.innerHTML = alertes.map(a=>`<p class="alert">${a}</p>`).join("");
+  actionsDiv.innerHTML = actions.map(a=>`<p>${a}</p>`).join("");
 }
 
-// LOAD DATA
+// CHARGEMENT DATA
 async function charger() {
 
   let snapshot = await db.collection("stats").get();
   let data = snapshot.docs.map(doc => doc.data());
-
-  majGraph(data);
-  majEquipe(data);
-}
-
-// GRAPH
-function majGraph(data) {
 
   let notes = data.map(d => d.note);
 
@@ -103,19 +112,4 @@ function majGraph(data) {
       datasets: [{label:"Note", data:notes}]
     }
   });
-}
-
-// TEAM
-function majEquipe(data) {
-
-  let eq = {};
-
-  data.forEach(d => {
-    if (!d.employe) return;
-    eq[d.employe] = (eq[d.employe] || 0) + 1;
-  });
-
-  equipe.innerHTML = Object.entries(eq)
-    .map(([n,c])=>`<p>${n} : ${c}</p>`)
-    .join("");
 }

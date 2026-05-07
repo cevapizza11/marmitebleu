@@ -1,6 +1,6 @@
 body {
   font-family: Arial;
-  background: #f0f2f5;
+  background: #eef1f5;
   padding: 10px;
 }
 
@@ -15,6 +15,12 @@ h1 {
   max-width: 500px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.highlight {
+  text-align: center;
+  background: #007BFF;
+  color: white;
 }
 
 input {
@@ -34,5 +40,5 @@ button {
   color: white;
 }
 
-.alert { color: red; }
+.alert { color: red; font-weight: bold; }
 .ok { color: green; }
