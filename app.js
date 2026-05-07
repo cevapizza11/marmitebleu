@@ -117,15 +117,65 @@ async function analyser() {
 
   // Calculs
   const taux = clients > 0 ? ((avis / clients) * 100).toFixed(1) : 0;
-  const caTeorique = clients * panierMoyenGlobal;
-  const ecartCA = caReel - caTeorique;
-  const score = ((note * 20) + (parseFloat(taux) * 2) - attente).toFixed(0);
+  const caRef = caPrev > 0 ? caPrev : (clients * panierMoyenGlobal);
+  const ecartCA = caReel > 0 ? caReel - caRef : 0;
+
+  // ---- SCORE SUR 100 ----
+  // 1. Note Google → 40 pts (0-5 → 0-40)
+  const ptsNote = note > 0 ? ((note / 5) * 40) : 0;
+
+  // 2. Température moules → 25 pts
+  //    ≥ 82°C = 25pts | 80-82 = 18pts | 75-80 = 10pts | <75 = 0pts | non saisi = 20pts (neutre)
+  let ptsTemp = 20; // neutre si non saisi
+  if (tempMoules > 0) {
+    if (tempMoules >= 82)      ptsTemp = 25;
+    else if (tempMoules >= 80) ptsTemp = 18;
+    else if (tempMoules >= 75) ptsTemp = 10;
+    else                       ptsTemp = 0;
+  }
+
+  // 3. Ruptures de stock → 15 pts
+  //    Aucune rupture = 15pts | rupture = 5pts
+  const hasRupture = ruptures && ruptures.toLowerCase() !== 'non' && ruptures.trim() !== '';
+  const ptsRupture = hasRupture ? 5 : 15;
+
+  // 4. Temps d'attente → 10 pts
+  //    ≤ 3min = 10pts | ≤ 5min = 8pts | ≤ 8min = 5pts | >8min = 0pts | non saisi = 8pts
+  let ptsAttente = 8;
+  if (attente > 0) {
+    if (attente <= 3)      ptsAttente = 10;
+    else if (attente <= 5) ptsAttente = 8;
+    else if (attente <= 8) ptsAttente = 5;
+    else                   ptsAttente = 0;
+  }
+
+  // 5. CA réel vs prévisionnel → 7 pts
+  //    Écart ≤ -10% = 0pts | -10% à 0% = 4pts | ≥ 0% = 7pts | non saisi = 4pts
+  let ptsCA = 4;
+  if (caReel > 0 && caRef > 0) {
+    const pctEcart = (ecartCA / caRef) * 100;
+    if (pctEcart >= 0)       ptsCA = 7;
+    else if (pctEcart >= -10) ptsCA = 4;
+    else                      ptsCA = 0;
+  }
+
+  // 6. Taux d'avis → 3 pts
+  //    ≥ 10% = 3pts | ≥ 5% = 2pts | < 5% = 1pt | non saisi = 1pt
+  let ptsTaux = 1;
+  if (clients > 0) {
+    if (parseFloat(taux) >= 10)     ptsTaux = 3;
+    else if (parseFloat(taux) >= 5) ptsTaux = 2;
+    else                            ptsTaux = 1;
+  }
+
+  const score = Math.round(ptsNote + ptsTemp + ptsRupture + ptsAttente + ptsCA + ptsTaux);
+  const scoreDetail = { ptsNote, ptsTemp, ptsRupture, ptsAttente, ptsCA, ptsTaux };
 
   const data = {
     date: new Date(),
     clients, avis, note, attente, employe,
     tempMoules, caReel, ruptures, absences,
-    taux: parseFloat(taux), score: parseInt(score), caPrev,
+    taux: parseFloat(taux), score, scoreDetail, caPrev, caRef,
     ecartCA
   };
 
@@ -221,10 +271,24 @@ function afficherResultat(d) {
   const scoreColor = d.score >= 80 ? '#2ecc71' : d.score >= 50 ? '#f39c12' : '#e74c3c';
   document.getElementById("scoreBadge").textContent = d.score;
   document.getElementById("scoreBadge").style.background = scoreColor;
-  const caRef = (d.caPrev > 0) ? d.caPrev : (d.clients * panierMoyenGlobal);
-  const caRefLabel = (d.caPrev > 0) ? 'CA prévu' : 'CA estimé (panier moy.)';
+  const caRefAff = d.caRef || (d.clients * panierMoyenGlobal);
+  const caRefLabel = (d.caPrev > 0) ? 'CA prévu' : 'CA estimé';
+  const ecartAff = d.caReel > 0 ? (d.ecartCA >= 0 ? '+' : '') + d.ecartCA + '€' : '—';
   document.getElementById("caInfo").textContent =
-    `CA réel : ${d.caReel > 0 ? d.caReel + '€' : 'non saisi'} | ${caRefLabel} : ${caRef}€ | Écart : ${d.caReel > 0 ? (d.caReel - caRef > 0 ? '+' : '') + (d.caReel - caRef) + '€' : '—'} | Taux avis : ${d.taux}%`;
+    `CA réel : ${d.caReel > 0 ? d.caReel + '€' : 'non saisi'} | ${caRefLabel} : ${caRefAff}€ | Écart : ${ecartAff} | Avis : ${d.taux}%`;
+
+  // Détail du score
+  if (d.scoreDetail) {
+    const sd = d.scoreDetail;
+    document.getElementById("scoreDetail").innerHTML =
+      `<span title="Note Google">⭐ ${sd.ptsNote.toFixed(0)}/40</span>
+       <span title="Moules">🌡️ ${sd.ptsTemp}/25</span>
+       <span title="Ruptures">📦 ${sd.ptsRupture}/15</span>
+       <span title="Attente">⏱️ ${sd.ptsAttente}/10</span>
+       <span title="CA">💶 ${sd.ptsCA}/7</span>
+       <span title="Avis">💬 ${sd.ptsTaux}/3</span>`;
+    document.getElementById("scoreDetail").style.display = "flex";
+  }
 
   // Alertes
   document.getElementById("alertesList").innerHTML = alertes.map(a =>
@@ -437,17 +501,12 @@ async function soumettreAvis() {
 async function analyserAvisIA(texte, note) {
   const GEMINI_KEY = "AIzaSyBJrJAwCr4r4gY6VTHpaGY0acK2fgborSo";
 
-  const prompt = `Tu es un expert en restauration. Analyse cet avis Google d'un restaurant de moules-frites (La Marmite Bleue, Saint-Pierre-la-Mer).
-
+  const prompt = `Tu es un expert en restauration. Analyse cet avis Google d un restaurant de moules-frites (La Marmite Bleue, Saint-Pierre-la-Mer).
 Avis (note ${note}/5) : "${texte}"
+Reponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou apres :
+{"sentiment":"positif","resume":"resume en 1 phrase max 20 mots","motsCles":["mot1","mot2","mot3"],"reponse":"Reponse courtoise 2-3 phrases en francais"}`;
 
-Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après :
-{
-  "sentiment": "positif" ou "neutre" ou "negatif",
-  "resume": "Résumé en 1 phrase (max 20 mots)",
-  "motsCles": ["mot1", "mot2", "mot3"],
-  "reponse": "Réponse courtoise suggérée au client (2-3 phrases, ton chaleureux et professionnel, en français)"
-}`;
+  console.log("🤖 Appel Gemini...");
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
@@ -460,10 +519,34 @@ Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après :
     }
   );
 
+  console.log("📡 Statut Gemini:", response.status, response.statusText);
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("❌ Erreur Gemini HTTP:", errText);
+    throw new Error("Gemini HTTP " + response.status);
+  }
+
   const data = await response.json();
+  console.log("📦 Réponse Gemini brute:", JSON.stringify(data).substring(0, 300));
+
+  if (!data.candidates || !data.candidates[0]) {
+    console.error("❌ Pas de candidates dans la réponse:", data);
+    throw new Error("Pas de réponse Gemini");
+  }
+
   const rawText = data.candidates[0].content.parts[0].text.trim();
+  console.log("📝 Texte Gemini:", rawText.substring(0, 200));
+
   const clean = rawText.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  const parsed = JSON.parse(clean);
+
+  // Normaliser le sentiment
+  const s = (parsed.sentiment || "").toLowerCase();
+  parsed.sentiment = s.includes("pos") ? "positif" : s.includes("neg") ? "negatif" : "neutre";
+
+  console.log("✅ Analyse Gemini OK:", parsed.sentiment);
+  return parsed;
 }
 
 // ============================================================
