@@ -17,6 +17,7 @@ const db = firebase.firestore();
 let chartStats = null;
 let chartAvis = null;
 let currentTab = 'dashboard';
+let panierMoyenGlobal = 20;
 
 // ============================================================
 // NAVIGATION TABS
@@ -30,6 +31,7 @@ function showTab(tab) {
 
   if (tab === 'dashboard') chargerDashboard();
   if (tab === 'avis') chargerAvis();
+  if (tab === 'reglages') chargerReglages();
 }
 
 // ============================================================
@@ -73,6 +75,7 @@ auth.onAuthStateChanged(user => {
     document.getElementById("appWrapper").style.display = "block";
     document.getElementById("userEmail").textContent = user.email;
     showTab('dashboard');
+    chargerReglagesInit();
   } else {
     document.getElementById("loginBox").style.display = "flex";
     document.getElementById("appWrapper").style.display = "none";
@@ -107,13 +110,14 @@ async function analyser() {
   const attente    = +document.getElementById("attente").value || 0;
   const employe    = document.getElementById("employe").value.trim();
   const tempMoules = +document.getElementById("tempMoules").value || 0;
-  const caReel     = +document.getElementById("caReel").value || 0;
+  const caReel        = +document.getElementById("caReel").value || 0;
+  const caPrev        = +document.getElementById("caPrev").value || 0;
   const ruptures   = document.getElementById("ruptures").value.trim();
   const absences   = document.getElementById("absences").value.trim();
 
   // Calculs
   const taux = clients > 0 ? ((avis / clients) * 100).toFixed(1) : 0;
-  const caTeorique = clients * 12;
+  const caTeorique = clients * panierMoyenGlobal;
   const ecartCA = caReel - caTeorique;
   const score = ((note * 20) + (parseFloat(taux) * 2) - attente).toFixed(0);
 
@@ -121,7 +125,7 @@ async function analyser() {
     date: new Date(),
     clients, avis, note, attente, employe,
     tempMoules, caReel, ruptures, absences,
-    taux: parseFloat(taux), score: parseInt(score),
+    taux: parseFloat(taux), score: parseInt(score), caPrev,
     ecartCA
   };
 
@@ -183,7 +187,8 @@ function afficherResultat(d) {
 
   // --- CA réel vs théorique
   if (d.caReel > 0) {
-    const ecartPct = ((d.ecartCA / (d.clients * 12)) * 100).toFixed(1);
+    const caBase = (d.caPrev > 0) ? d.caPrev : (d.clients * panierMoyenGlobal);
+    const ecartPct = caBase > 0 ? ((d.ecartCA / caBase) * 100).toFixed(1) : 0;
     if (d.ecartCA < -(d.clients * 12 * 0.1)) {
       alertes.push({ icon: "🔴", label: "CA réel bien en dessous du théorique", detail: `${d.ecartCA > 0 ? '+' : ''}${d.ecartCA}€ (${ecartPct}%)` });
       actions.push({ priorite: "AUJOURD'HUI", texte: "Vérifier la caisse — contrôle des formules jetons utilisées vs encaissements — possible erreur ou fraude" });
@@ -215,8 +220,10 @@ function afficherResultat(d) {
   const scoreColor = d.score >= 80 ? '#2ecc71' : d.score >= 50 ? '#f39c12' : '#e74c3c';
   document.getElementById("scoreBadge").textContent = d.score;
   document.getElementById("scoreBadge").style.background = scoreColor;
+  const caRef = (d.caPrev > 0) ? d.caPrev : (d.clients * panierMoyenGlobal);
+  const caRefLabel = (d.caPrev > 0) ? 'CA prévu' : 'CA estimé (panier moy.)';
   document.getElementById("caInfo").textContent =
-    `CA réel : ${d.caReel > 0 ? d.caReel + '€' : 'non saisi'} | CA théorique : ${d.clients * 12}€ | Taux avis : ${d.taux}%`;
+    `CA réel : ${d.caReel > 0 ? d.caReel + '€' : 'non saisi'} | ${caRefLabel} : ${caRef}€ | Écart : ${d.caReel > 0 ? (d.caReel - caRef > 0 ? '+' : '') + (d.caReel - caRef) + '€' : '—'} | Taux avis : ${d.taux}%`;
 
   // Alertes
   document.getElementById("alertesList").innerHTML = alertes.map(a =>
@@ -583,6 +590,39 @@ async function chargerAvis() {
 }
 
 // ============================================================
+// ============================================================
+// RÉGLAGES
+// ============================================================
+
+async function chargerReglagesInit() {
+  try {
+    const doc = await db.collection("config").doc("reglages").get();
+    if (doc.exists) {
+      panierMoyenGlobal = doc.data().panierMoyen || 20;
+    }
+  } catch(e) { /* silencieux */ }
+}
+
+async function chargerReglages() {
+  const doc = await db.collection("config").doc("reglages").get().catch(() => null);
+  const val = doc && doc.exists ? doc.data().panierMoyen : panierMoyenGlobal;
+  document.getElementById("inputPanierMoyen").value = val;
+  document.getElementById("affichagePanier").textContent = val + " €";
+}
+
+async function sauvegarderReglages() {
+  const val = +document.getElementById("inputPanierMoyen").value;
+  if (!val || val < 1) { showToast("Panier moyen invalide", "error"); return; }
+  try {
+    await db.collection("config").doc("reglages").set({ panierMoyen: val });
+    panierMoyenGlobal = val;
+    document.getElementById("affichagePanier").textContent = val + " €";
+    showToast("✅ Réglages sauvegardés !");
+  } catch(e) {
+    showToast("❌ Erreur sauvegarde", "error");
+  }
+}
+
 // NOTIFICATIONS
 // ============================================================
 function notifier(message) {

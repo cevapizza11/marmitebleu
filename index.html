@@ -71,6 +71,9 @@
     <button class="nav-btn" id="nav-avis" onclick="showTab('avis')">
       ⭐ Avis Google
     </button>
+    <button class="nav-btn" id="nav-reglages" onclick="showTab('reglages')">
+      ⚙️ Réglages
+    </button>
   </nav>
 
   <!-- MAIN -->
@@ -171,6 +174,10 @@
             <div class="form-group">
               <label>CA réel caisse (€)</label>
               <input id="caReel" type="number" placeholder="ex : 1020" min="0">
+            </div>
+            <div class="form-group">
+              <label>CA prévisionnel du jour (€) <span style="color:var(--text-muted);font-size:0.7rem;">optionnel — sinon panier moyen réglages</span></label>
+              <input id="caPrev" type="number" placeholder="ex : 1200" min="0">
             </div>
           </div>
 
@@ -306,6 +313,42 @@
         <div id="avisHistorique">
           <p class="empty-state">Aucun avis encore saisi.</p>
         </div>
+      </div>
+
+    </div>
+
+    <!-- ====== TAB RÉGLAGES ====== -->
+    <div class="tab-content" id="tab-reglages">
+
+      <div class="card">
+        <div class="card-title">⚙️ Paramètres du restaurant</div>
+
+        <div class="form-group">
+          <label>Panier moyen par client (€)</label>
+          <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:8px;">
+            Utilisé pour calculer le CA estimé quand tu ne saisis pas de CA prévisionnel.
+            Base-toi sur ta formule principale.
+          </p>
+          <input id="inputPanierMoyen" type="number" step="0.5" min="1" placeholder="ex : 20">
+        </div>
+
+        <div style="background:var(--ocean-mid);border-radius:var(--radius-sm);padding:14px;margin:12px 0;border:1px solid var(--ocean-border);">
+          <p style="font-size:0.78rem;color:var(--text-secondary);">Panier moyen actuel</p>
+          <p style="font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--gold);" id="affichagePanier">—</p>
+        </div>
+
+        <button class="btn btn-primary" onclick="sauvegarderReglages()">
+          💾 Sauvegarder
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📊 Comment est calculé le CA de référence ?</div>
+        <p style="font-size:0.83rem;color:var(--text-secondary);line-height:1.7;">
+          • Si tu saisis un <strong style="color:var(--text-primary);">CA prévisionnel</strong> dans la saisie journée → c'est lui qui sert de référence.<br>
+          • Sinon → le CA estimé = <strong style="color:var(--text-primary);">nombre de clients × panier moyen</strong> défini ici.<br>
+          • L'écart affiché = CA réel − CA de référence.
+        </p>
       </div>
 
     </div>
