@@ -213,7 +213,7 @@ function afficherResultat(d) {
 
   // Score badge
   const scoreColor = d.score >= 80 ? '#2ecc71' : d.score >= 50 ? '#f39c12' : '#e74c3c';
-  document.getElementById("scoreValue").textContent = d.score;
+  document.getElementById("scoreBadge").textContent = d.score;
   document.getElementById("scoreBadge").style.background = scoreColor;
   document.getElementById("caInfo").textContent =
     `CA réel : ${d.caReel > 0 ? d.caReel + '€' : 'non saisi'} | CA théorique : ${d.clients * 12}€ | Taux avis : ${d.taux}%`;
@@ -427,6 +427,8 @@ async function soumettreAvis() {
 // ANALYSE IA (Claude API)
 // ============================================================
 async function analyserAvisIA(texte, note) {
+  const GEMINI_KEY = "AIzaSyBJrJAwCr4r4gY6VTHpaGY0acK2fgborSo";
+
   const prompt = `Tu es un expert en restauration. Analyse cet avis Google d'un restaurant de moules-frites (La Marmite Bleue, Saint-Pierre-la-Mer).
 
 Avis (note ${note}/5) : "${texte}"
@@ -439,18 +441,19 @@ Réponds UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après :
   "reponse": "Réponse courtoise suggérée au client (2-3 phrases, ton chaleureux et professionnel, en français)"
 }`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    }
+  );
 
   const data = await response.json();
-  const rawText = data.content.map(i => i.text || "").join("").trim();
+  const rawText = data.candidates[0].content.parts[0].text.trim();
   const clean = rawText.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
 }
