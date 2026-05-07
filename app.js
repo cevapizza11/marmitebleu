@@ -136,7 +136,8 @@ async function analyser() {
     chargerDashboard();
     document.getElementById("formSaisie").reset();
   } catch(e) {
-    showToast("❌ Erreur d'enregistrement", "error");
+    console.error("ERREUR FIRESTORE stats:", e.code, e.message);
+    showToast("❌ " + (e.message || "Erreur d'enregistrement"), "error");
   }
 
   btn.textContent = "Analyser la journée";
@@ -599,8 +600,13 @@ async function chargerReglagesInit() {
     const doc = await db.collection("config").doc("reglages").get();
     if (doc.exists) {
       panierMoyenGlobal = doc.data().panierMoyen || 20;
+      console.log("Panier moyen chargé :", panierMoyenGlobal, "€");
+    } else {
+      console.log("Pas de réglages en base, panier moyen par défaut :", panierMoyenGlobal, "€");
     }
-  } catch(e) { /* silencieux */ }
+  } catch(e) {
+    console.error("ERREUR CHARGEMENT RÉGLAGES:", e.code, e.message);
+  }
 }
 
 async function chargerReglages() {
@@ -619,7 +625,8 @@ async function sauvegarderReglages() {
     document.getElementById("affichagePanier").textContent = val + " €";
     showToast("✅ Réglages sauvegardés !");
   } catch(e) {
-    showToast("❌ Erreur sauvegarde", "error");
+    console.error("ERREUR SAUVEGARDE RÉGLAGES:", e.code, e.message);
+    showToast("❌ " + (e.message || "Erreur sauvegarde"), "error");
   }
 }
 
