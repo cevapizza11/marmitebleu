@@ -1,4 +1,4 @@
-console.log("APP JS CHARGÉ");
+console.log("JS OK");
 
 function login() {
   alert("LOGIN OK");
