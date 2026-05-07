@@ -1,11 +1,11 @@
-// Your web app's Firebase configuration
+// 🔥 CONFIG FIREBASE
 const firebaseConfig = {
-  apiKey: "AIzaSyDhqKmCJJx5ScXUxaoip1eMiy10P0BvD9U",
-  authDomain: "marmite-bleue.firebaseapp.com",
-  projectId: "marmite-bleue",
-  storageBucket: "marmite-bleue.firebasestorage.app",
-  messagingSenderId: "938472624829",
-  appId: "1:938472624829:web:edd7453c2589c820dfddd4"
+  apiKey: "REMPLACE_PAR_TON_API_KEY",
+  authDomain: "REMPLACE.firebaseapp.com",
+  projectId: "REMPLACE_PROJECT_ID",
+  storageBucket: "REMPLACE.appspot.com",
+  messagingSenderId: "REMPLACE",
+  appId: "REMPLACE"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -17,10 +17,16 @@ let chart;
 
 // LOGIN
 function login() {
-  auth.signInWithEmailAndPassword(email.value, password.value)
-    .catch(()=>alert("Erreur login"));
+  const userEmail = document.getElementById("email").value;
+  const userPassword = document.getElementById("password").value;
+
+  auth.signInWithEmailAndPassword(userEmail, userPassword)
+    .catch((error) => {
+      alert("Erreur connexion : " + error.message);
+    });
 }
 
+// LOGOUT
 function logout() {
   auth.signOut();
 }
@@ -28,12 +34,12 @@ function logout() {
 // SESSION
 auth.onAuthStateChanged(user => {
   if (user) {
-    loginBox.style.display = "none";
-    app.style.display = "block";
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("app").style.display = "block";
     charger();
   } else {
-    loginBox.style.display = "block";
-    app.style.display = "none";
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("app").style.display = "none";
   }
 });
 
@@ -41,11 +47,11 @@ auth.onAuthStateChanged(user => {
 async function analyser() {
 
   let data = {
-    clients: +clients.value,
-    avis: +avis.value,
-    note: +note.value,
-    attente: +attente.value,
-    employe: employe.value,
+    clients: +document.getElementById("clients").value,
+    avis: +document.getElementById("avis").value,
+    note: +document.getElementById("note").value,
+    attente: +document.getElementById("attente").value,
+    employe: document.getElementById("employe").value,
     date: new Date()
   };
 
@@ -55,61 +61,10 @@ async function analyser() {
   await db.collection("stats").add(data);
 
   afficher(data);
+  verifierAlertes(data);
   charger();
 }
 
-// MOTEUR INTELLIGENT
+// AFFICHAGE
 function afficher(d) {
-
-  let alertes = [];
-  let actions = [];
-
-  if (d.note < 4.5) {
-    alertes.push("Note faible");
-    actions.push("Former équipe + contrôle qualité");
-  }
-
-  if (d.taux < 5) {
-    alertes.push("Pas assez d’avis");
-    actions.push("QR code + demande client systématique");
-  }
-
-  if (d.attente > 5) {
-    alertes.push("Attente trop longue");
-    actions.push("Renforcer production / anticiper rush");
-  }
-
-  if (alertes.length === 0) {
-    alertes.push("RAS");
-    actions.push("Maintenir performance");
-  }
-
-  // 💰 estimation CA (simple)
-  let panierMoyen = 12;
-  let ca = d.clients * panierMoyen;
-
-  score.innerText = `Score ${d.score}`;
-  resume.innerText = `CA estimé : ${ca}€ | Avis : ${d.taux}%`;
-
-  alertesDiv.innerHTML = alertes.map(a=>`<p class="alert">${a}</p>`).join("");
-  actionsDiv.innerHTML = actions.map(a=>`<p>${a}</p>`).join("");
-}
-
-// CHARGEMENT DATA
-async function charger() {
-
-  let snapshot = await db.collection("stats").get();
-  let data = snapshot.docs.map(doc => doc.data());
-
-  let notes = data.map(d => d.note);
-
-  if (chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      labels: notes.map((_,i)=>i+1),
-      datasets: [{label:"Note", data:notes}]
-    }
-  });
 }

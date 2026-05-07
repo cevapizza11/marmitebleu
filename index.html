@@ -2,14 +2,19 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Marmite Bleue V8</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marmite Dashboard V9</title>
 
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007BFF">
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+<!-- FIREBASE V8 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
+<!-- CHART -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
@@ -17,25 +22,30 @@
 
 <h1>🍲 Marmite Dashboard</h1>
 
+<!-- LOGIN -->
 <div class="card" id="loginBox">
+<h2>Connexion</h2>
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Mot de passe">
 <button onclick="login()">Connexion</button>
 </div>
 
+<!-- APP -->
 <div id="app" style="display:none;">
 
 <div class="card highlight">
-<h2 id="score"></h2>
+<h2 id="score">Score</h2>
 <p id="resume"></p>
 </div>
 
 <div class="card">
+<h3>📊 Analyse Journée</h3>
+
 <input id="clients" type="number" placeholder="Clients">
 <input id="avis" type="number" placeholder="Avis">
 <input id="note" type="number" step="0.1" placeholder="Note">
-<input id="attente" type="number" placeholder="Attente">
-<input id="employe" placeholder="Employé">
+<input id="attente" type="number" placeholder="Attente (min)">
+<input id="employe" placeholder="Employé cité">
 
 <button onclick="analyser()">Analyser journée</button>
 <button onclick="logout()">Déconnexion</button>
@@ -48,16 +58,4 @@
 
 <div class="card">
 <h3>🧠 Actions recommandées</h3>
-<div id="actions"></div>
-</div>
-
-<div class="card">
-<h3>📊 Performance</h3>
-<canvas id="chart"></canvas>
-</div>
-
-</div>
-
-<script src="app.js"></script>
-</body>
-</html>
+</html>">
