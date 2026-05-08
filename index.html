@@ -438,7 +438,16 @@
 
         <div class="card">
           <div class="card-title">⏰ Planning heure par heure</div>
-          <div id="planningTable"></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;border-top:1px solid var(--ocean-border);margin-top:8px;">
+          <span style="font-size:0.72rem;color:var(--text-muted);width:100%;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.08em;">Légende staff</span>
+          <span class="sbadge">🍲 Marmite (cuisson moules)</span>
+          <span class="sbadge">🍟 Friteuse (frites)</span>
+          <span class="sbadge">🔄 Remplissage (approvisionnement)</span>
+          <span class="sbadge">🧑‍🍳 Salle (service)</span>
+          <span class="sbadge">🍺 Bar (boissons)</span>
+          <span class="sbadge total-badge">= Total équipe</span>
+        </div>
+          <div id="planningTable" style="margin-top:12px;"></div>
         </div>
 
       </div>
@@ -505,7 +514,16 @@
 
         <div class="card">
           <div class="card-title">📋 Détail par créneau (30 min)</div>
-          <div class="table-wrap">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;border-top:1px solid var(--ocean-border);margin-top:8px;">
+          <span style="font-size:0.72rem;color:var(--text-muted);width:100%;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.08em;">Légende staff</span>
+          <span class="sbadge">🍲 Marmite (cuisson moules)</span>
+          <span class="sbadge">🍟 Friteuse (frites)</span>
+          <span class="sbadge">🔄 Remplissage (approvisionnement)</span>
+          <span class="sbadge">🧑‍🍳 Salle (service)</span>
+          <span class="sbadge">🍺 Bar (boissons)</span>
+          <span class="sbadge total-badge">= Total équipe</span>
+        </div>
+          <div class="table-wrap" style="margin-top:12px;">
             <table style="min-width:400px;">
               <thead><tr>
                 <th>Créneau</th>
@@ -580,6 +598,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=11.1"></script>
+<script src="app.js?v=11.2"></script>
 </body>
 </html>
