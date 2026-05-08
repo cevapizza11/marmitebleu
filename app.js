@@ -875,12 +875,26 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
   const pmResto   = pm;          // moules : panier moyen réglages (ex: 24-28€)
   const pmSnack   = pm * 0.55;   // snacking : ~55% du panier resto (fish/nuggets/boissons)
 
+  // ---- BASE SNACKING INDÉPENDANTE ----
+  // Haute saison peak = 60 clients/h = 30 par créneau 30 min
+  // Coefficients saison/jour appliqués aussi sur le snack
+  const baseSnack = 30; // clients par 30 min au peak snack haute saison
+  // Distribution snack sur la journée (pct relatif au peak snack)
+  const pctSnackMap = {
+    "14h30": 0.55, "15h00": 0.75, "15h30": 1.00,
+    "16h00": 1.00, "16h30": 0.75, "17h00": 0.45
+  };
+
   // ---- PRÉ-CALCUL ARRIVÉES PAR CRÉNEAU ----
-  const arrivees = creneaux.map(c => Math.round(
-    c.snack ? clientsMoy * c.pct * 0.40 // snacking = 40% de la fréquentation resto
-            : clientsMoy * c.pct
-  ));
-  const totalArrivees     = arrivees.reduce((s, n) => s + n, 0);
+  const arrivees = creneaux.map(c => {
+    if (c.snack) {
+      // Snacking : base indépendante avec mêmes coefficients saison/jour/météo/event
+      const snackPeak = Math.round(baseSnack * coeffJour * coeffSaison * coeffMeteo * coeffEvent);
+      return Math.round(snackPeak * (pctSnackMap[c.heure] || 0.5));
+    }
+    return Math.round(clientsMoy * c.pct);
+  });
+  const totalArrivees      = arrivees.reduce((s, n) => s + n, 0);
   const totalArriveesResto = creneaux.reduce((s, c, i) => s + (!c.snack ? arrivees[i] : 0), 0);
   const totalArriveesSnack = creneaux.reduce((s, c, i) => s + ( c.snack ? arrivees[i] : 0), 0);
 
