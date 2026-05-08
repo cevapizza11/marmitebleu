@@ -329,10 +329,20 @@ async function chargerDashboard() {
     const attenteMoy = (data.reduce((s, d) => s + (d.attente || 0), 0) / data.length).toFixed(1);
     const totalClients = data.reduce((s, d) => s + (d.clients || 0), 0);
 
+    // CA — uniquement journées avec CA réel saisi
+    const joursAvecCA = data.filter(d => d.caReel > 0);
+    const totalCA = joursAvecCA.reduce((s, d) => s + (d.caReel || 0), 0);
+    const caMoyJour = joursAvecCA.length > 0 ? Math.round(totalCA / joursAvecCA.length) : 0;
+    const totalClientsAvecCA = joursAvecCA.reduce((s, d) => s + (d.clients || 0), 0);
+    const panierMoyenReel = totalClientsAvecCA > 0 ? (totalCA / totalClientsAvecCA).toFixed(2) : 0;
+
     document.getElementById("kpi-note").textContent = notesMoy;
     document.getElementById("kpi-attente").textContent = attenteMoy + " min";
     document.getElementById("kpi-clients").textContent = totalClients;
     document.getElementById("kpi-sessions").textContent = data.length;
+    document.getElementById("kpi-ca-total").textContent = totalCA > 0 ? totalCA.toLocaleString('fr-FR') + " €" : "—";
+    document.getElementById("kpi-ca-moy").textContent = caMoyJour > 0 ? caMoyJour + " €" : "—";
+    document.getElementById("kpi-ca-moy-client").textContent = panierMoyenReel > 0 ? panierMoyenReel + " €" : "—";
 
     // Graphique notes
     const labels = data.map((d, i) => {
