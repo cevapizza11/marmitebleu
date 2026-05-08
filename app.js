@@ -1150,26 +1150,78 @@ function afficherImport(tickets) {
     }
   });
 
+  // ---- CALCUL EN SALLE (durée repas 1h30 = 3 créneaux) ----
+  const DUREE_REPAS_IMP = 3;
+  const arriveesList = cles.map(k => creneaux[k].tickets);
+  const enSalleList  = arriveesList.map((_, i) => {
+    let cumul = 0;
+    for (let j = Math.max(0, i - DUREE_REPAS_IMP + 1); j <= i; j++) cumul += arriveesList[j];
+    return cumul;
+  });
+  const maxEnSalleImp = Math.max(...enSalleList);
+  const totalArriveesImp = arriveesList.reduce((s, n) => s + n, 0);
+  const pm = panierMoyenGlobal || 20;
+
+  // ---- CALCUL STAFF ----
+  function calcStaffImp(nSalle) {
+    const marmites    = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
+    const friteuses   = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
+    const remplissage = nSalle >= 40 ? 1 : 0;
+    const salle       = nSalle >= 60 ? 3 : nSalle >= 30 ? 2 : nSalle >= 10 ? 1 : 1;
+    const bar         = nSalle >= 50 ? 2 : nSalle >= 20 ? 1 : 0;
+    return { marmites, friteuses, remplissage, salle, bar,
+             total: marmites + friteuses + remplissage + salle + bar };
+  }
+
   // Tableau détail
-  const rows = cles.map(k => {
-    const c = creneaux[k];
-    const pct = tickets.length > 0 ? ((c.tickets / tickets.length) * 100).toFixed(1) : 0;
-    const barWidth = Math.round(parseFloat(pct) * 2);
-    const isPeak = c.tickets >= Math.max(...Object.values(creneaux).map(x => x.tickets)) * 0.7;
+  const rows = cles.map((k, i) => {
+    const c       = creneaux[k];
+    const arrive  = arriveesList[i];
+    const salle   = enSalleList[i];
+    const staff   = calcStaffImp(salle);
+    const pct     = tickets.length > 0 ? ((arrive / tickets.length) * 100).toFixed(1) : 0;
+    const pctSalle = maxEnSalleImp > 0 ? Math.round((salle / maxEnSalleImp) * 100) : 0;
+    const barColor = pctSalle >= 85 ? 'var(--danger)' : pctSalle >= 60 ? 'var(--warning)' : 'var(--success)';
+    const isPeak  = arrive >= Math.max(...arriveesList) * 0.7;
+
     return `<tr ${isPeak ? 'class="peak-row"' : ''}>
       <td><strong>${c.label}</strong></td>
-      <td style="color:var(--gold)">${c.tickets}</td>
-      <td style="color:var(--aqua)">${formatEuro(c.ca)}</td>
+      <td style="color:var(--gold);text-align:center;font-weight:600;">${arrive}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
-          <div style="width:${barWidth}px;height:6px;background:var(--gold);border-radius:3px;opacity:0.7;"></div>
-          <span style="font-size:0.75rem;color:var(--text-secondary)">${pct}%</span>
+          <div style="width:${pctSalle * 0.5}px;height:6px;background:${barColor};border-radius:3px;min-width:2px;max-width:50px;"></div>
+          <span style="color:var(--aqua-light);font-weight:600;">${salle}</span>
+        </div>
+      </td>
+      <td style="color:var(--aqua);font-size:0.8rem;">${formatEuro(c.ca)}</td>
+      <td style="font-size:0.75rem;color:var(--text-secondary)">${pct}%</td>
+      <td>
+        <div class="staff-badges">
+          ${staff.marmites    > 0 ? `<span class="sbadge">🍲×${staff.marmites}</span>`  : ''}
+          ${staff.friteuses   > 0 ? `<span class="sbadge">🍟×${staff.friteuses}</span>` : ''}
+          ${staff.remplissage > 0 ? `<span class="sbadge">🔄×1</span>`                  : ''}
+          <span class="sbadge">🧑‍🍳×${staff.salle}</span>
+          ${staff.bar > 0 ? `<span class="sbadge">🍺×${staff.bar}</span>` : ''}
+          <span class="sbadge total-badge">= ${staff.total}</span>
         </div>
       </td>
     </tr>`;
   }).join("");
 
-  document.getElementById("importTable").innerHTML = rows;
+  document.getElementById("importTable").innerHTML = `
+    ${rows}
+    <tr style="border-top:2px solid var(--ocean-border);">
+      <td style="color:var(--text-secondary);font-size:0.75rem;padding-top:10px;">
+        <em>Durée repas : 1h30</em>
+      </td>
+      <td style="text-align:center;padding-top:10px;">
+        <span class="sbadge total-badge">${totalArriveesImp}</span>
+      </td>
+      <td style="padding-top:10px;">
+        <span style="font-size:0.75rem;color:var(--text-muted);">max : ${maxEnSalleImp}</span>
+      </td>
+      <td colspan="3"></td>
+    </tr>`;
   document.getElementById("importResultat").style.display = "block";
   document.getElementById("importResultat").scrollIntoView({ behavior: 'smooth' });
 }
