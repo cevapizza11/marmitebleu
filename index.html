@@ -74,6 +74,9 @@
     <button class="nav-btn" id="nav-previsions" onclick="showTab('previsions')">
       📅 Prévisions
     </button>
+    <button class="nav-btn" id="nav-import" onclick="showTab('import')">
+      📥 Import CSV
+    </button>
     <button class="nav-btn" id="nav-reglages" onclick="showTab('reglages')">
       ⚙️ Réglages
     </button>
@@ -342,7 +345,21 @@
         <div class="form-row">
           <div class="form-group">
             <label>Date à prévoir</label>
-            <input id="prevDate" type="date">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button onclick="changerDate(-1)"
+                style="width:42px;height:42px;border:1px solid var(--ocean-border);background:var(--ocean-mid);color:var(--text-primary);border-radius:8px;font-size:1.2rem;cursor:pointer;flex-shrink:0;">
+                ‹
+              </button>
+              <div id="prevDateAffichage"
+                style="flex:1;padding:11px 14px;background:var(--ocean-mid);border:1px solid var(--ocean-border);border-radius:8px;color:var(--text-primary);font-size:0.88rem;text-align:center;font-weight:600;">
+                —
+              </div>
+              <input type="hidden" id="prevDate">
+              <button onclick="changerDate(+1)"
+                style="width:42px;height:42px;border:1px solid var(--ocean-border);background:var(--ocean-mid);color:var(--text-primary);border-radius:8px;font-size:1.2rem;cursor:pointer;flex-shrink:0;">
+                ›
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label>Saison</label>
@@ -403,8 +420,116 @@
         </div>
 
         <div class="card">
+          <div class="card-title">✏️ Ajuster la prévision manuellement</div>
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:12px;">
+            Tu penses que la journée sera différente ? Saisis ton propre CA cible — le planning staff se recalcule automatiquement.
+          </p>
+          <div style="display:flex;gap:10px;align-items:flex-end;">
+            <div class="form-group" style="flex:1;margin:0;">
+              <label>Mon CA estimé pour cette journée (€)</label>
+              <input id="prevCAManuel" type="number" placeholder="ex : 6 500" min="0" step="50">
+            </div>
+            <button class="btn btn-primary" onclick="appliquerCAManuel()"
+              style="width:auto;padding:12px 20px;white-space:nowrap;flex-shrink:0;">
+              Recalculer ↻
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="card-title">⏰ Planning heure par heure</div>
           <div id="planningTable"></div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ====== TAB IMPORT CSV ====== -->
+    <div class="tab-content" id="tab-import">
+
+      <!-- ZONE UPLOAD -->
+      <div class="card">
+        <div class="card-title">📥 Import rapport SumUp Pro</div>
+        <p style="font-size:0.82rem;color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">
+          Exporte depuis SumUp : <strong style="color:var(--text-primary);">Back Office → Rapports → Commandes → Exporter CSV</strong><br>
+          Le fichier sera lu automatiquement et alimentera les prévisions.
+        </p>
+
+        <!-- Drag & Drop zone -->
+        <div id="dropZone" onclick="document.getElementById('csvInput').click()"
+          style="border:2px dashed var(--ocean-border);border-radius:var(--radius);padding:30px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:12px;">
+          <div style="font-size:2rem;margin-bottom:8px;">📄</div>
+          <p style="color:var(--text-secondary);font-size:0.85rem;">Glisse ton fichier CSV ici<br>ou clique pour sélectionner</p>
+          <input type="file" id="csvInput" accept=".csv" style="display:none;" onchange="lireCSV(this.files[0])">
+        </div>
+
+        <!-- Données de test -->
+        <div style="text-align:center;margin-bottom:4px;">
+          <button onclick="chargerDonneeTest()" class="btn btn-secondary"
+            style="width:auto;padding:8px 18px;font-size:0.78rem;margin-top:0;">
+            🧪 Tester avec données fictives SumUp
+          </button>
+        </div>
+      </div>
+
+      <!-- RÉSULTAT IMPORT -->
+      <div id="importResultat" style="display:none;">
+
+        <div class="card">
+          <div class="card-title">📊 Aperçu de l'import</div>
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-value" id="imp-tickets">—</div>
+              <div class="kpi-label">Tickets importés</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-value" id="imp-ca" style="font-size:1.2rem;">—</div>
+              <div class="kpi-label">CA total</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-value" id="imp-date">—</div>
+              <div class="kpi-label">Date</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-value" id="imp-moy" style="font-size:1.2rem;">—</div>
+              <div class="kpi-label">Panier moyen</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">⏰ Répartition heure par heure</div>
+          <canvas id="chartImport" style="max-height:200px;"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📋 Détail par créneau (30 min)</div>
+          <div class="table-wrap">
+            <table style="min-width:400px;">
+              <thead><tr>
+                <th>Créneau</th>
+                <th>Tickets</th>
+                <th>CA</th>
+                <th>% journée</th>
+              </tr></thead>
+              <tbody id="importTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">💾 Enregistrer dans Firestore</div>
+          <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:12px;">
+            Sauvegarde ces données pour améliorer les prévisions futures.
+          </p>
+          <div class="form-group">
+            <label>Date de la journée importée</label>
+            <input id="importDate" type="date">
+          </div>
+          <button class="btn btn-primary" onclick="sauvegarderImport()">
+            💾 Sauvegarder et alimenter les prévisions
+          </button>
         </div>
 
       </div>
@@ -453,6 +578,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=10.7"></script>
+<script src="app.js?v=11.0"></script>
 </body>
 </html>

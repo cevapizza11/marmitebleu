@@ -32,6 +32,7 @@ function showTab(tab) {
   if (tab === 'dashboard') chargerDashboard();
   if (tab === 'avis') chargerAvis();
   if (tab === 'reglages') chargerReglages();
+  if (tab === 'import') initImport();
   if (tab === 'previsions') initPrevisions();
 }
 
@@ -686,126 +687,214 @@ async function chargerAvis() {
 // ============================================================
 
 function initPrevisions() {
-  // Pré-remplir la date avec aujourd'hui
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById("prevDate").value = today;
+  // Initialiser avec aujourd'hui si pas encore de date
+  const hidden = document.getElementById("prevDate");
+  if (!hidden.value) {
+    const today = new Date().toISOString().split('T')[0];
+    hidden.value = today;
+  }
+  majAffichageDate();
 }
 
-function genererPrevisions() {
+function changerDate(delta) {
+  const hidden = document.getElementById("prevDate");
+  const base = hidden.value ? new Date(hidden.value + "T12:00:00") : new Date();
+  base.setDate(base.getDate() + delta);
+  hidden.value = base.toISOString().split('T')[0];
+  majAffichageDate();
+}
+
+function majAffichageDate() {
+  const hidden = document.getElementById("prevDate");
+  if (!hidden.value) return;
+  const d = new Date(hidden.value + "T12:00:00");
+  const jours = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  const mois  = ["jan","fév","mar","avr","mai","juin","juil","août","sep","oct","nov","déc"];
+  const affich = `${jours[d.getDay()]} ${d.getDate()} ${mois[d.getMonth()]} ${d.getFullYear()}`;
+  document.getElementById("prevDateAffichage").textContent = affich;
+}
+
+// Formater un montant en euros avec 2 décimales
+function formatEuro(val) {
+  return val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
+// Variables prévisions globales pour recalcul à la volée
+let prevState = {};
+
+async function genererPrevisions() {
   const dateStr = document.getElementById("prevDate").value;
-  const saison   = document.getElementById("prevSaison").value;
-  const meteo    = document.getElementById("prevMeteo").value;
-  const event    = document.getElementById("prevEvent").value;
+  const saison  = document.getElementById("prevSaison").value;
+  const meteo   = document.getElementById("prevMeteo").value;
+  const event   = document.getElementById("prevEvent").value;
 
   if (!dateStr) { showToast("Sélectionne une date !", "error"); return; }
 
-  const date = new Date(dateStr);
-  const jourSemaine = date.getDay(); // 0=dim, 1=lun ... 6=sam
+  const btn = document.querySelector("#tab-previsions .btn-primary");
+  btn.textContent = "Calcul en cours..."; btn.disabled = true;
 
-  // ---- COEFFICIENTS JOUR ----
-  // Base = réaliste jour moyen (coeff 1.0)
-  const coeffJour = {
-    0: 1.3,  // dimanche
-    1: 0.6,  // lundi
-    2: 0.65, // mardi
-    3: 0.7,  // mercredi
-    4: 0.85, // jeudi
-    5: 1.1,  // vendredi
-    6: 1.4   // samedi
-  }[jourSemaine] || 1.0;
+  const date = new Date(dateStr + "T12:00:00");
+  const jourSemaine = date.getDay();
+  const moisDate = date.getMonth(); // 0=jan ... 11=dec
 
-  // ---- COEFFICIENTS SAISON ----
-  const coeffSaison = { haute: 1.5, moyenne: 1.0, basse: 0.55 }[saison];
-
-  // ---- COEFFICIENTS MÉTÉO ----
-  // Mauvais temps = plus de monde (restaurant de bord de mer couvert)
-  const coeffMeteo = { mauvais: 1.2, nuageux: 1.0, beau: 0.85 }[meteo];
-
-  // ---- COEFFICIENTS ÉVÉNEMENT ----
-  const coeffEvent = { non: 1.0, marche: 1.25, concert: 1.35 }[event];
-
-  // ---- BASE CLIENTS & CA ----
-  // Base réaliste saison moyenne, jour moyen = 80 clients
-  const baseClients = 80;
-  const clientsMoy = Math.round(baseClients * coeffJour * coeffSaison * coeffMeteo * coeffEvent);
-  const clientsMin = Math.round(clientsMoy * 0.75);
-  const clientsMax = Math.round(clientsMoy * 1.25);
-
+  // ---- COEFFICIENTS FIXES (fallback) ----
+  const coeffJour = { 0:1.10, 1:0.38, 2:0.42, 3:0.48, 4:0.65, 5:0.85, 6:1.00 }[jourSemaine] || 0.6;
+  const coeffSaison = { haute:1.50, moyenne:0.75, basse:0.55 }[saison];
+  const coeffMeteo  = { mauvais:1.20, nuageux:1.00, beau:0.82 }[meteo];
+  const coeffEvent  = { non:1.00, marche:1.28, concert:1.40 }[event];
+  const baseClients = 200;
   const pm = panierMoyenGlobal || 20;
+  const clientsCoeffs = Math.round(baseClients * coeffJour * coeffSaison * coeffMeteo * coeffEvent);
+
+  // ---- LECTURE DONNÉES RÉELLES FIRESTORE ----
+  let clientsMoy = clientsCoeffs;
+  let sourceLabel = "📐 Estimation (pas encore de données réelles)";
+  let fiabilite = 0;
+
+  try {
+    const snapshot = await db.collection("stats").get();
+    const allData = snapshot.docs.map(d => ({ ...d.data() }));
+
+    // Filtrer : même jour de semaine
+    const memJour = allData.filter(d => {
+      if (!d.date || !d.date.toDate) return false;
+      return d.date.toDate().getDay() === jourSemaine && d.clients > 0;
+    });
+
+    // Filtrer : même saison (mois proches)
+    const moisHaute   = [5,6,7,8];     // juin-sept
+    const moisMoyenne = [4,9];          // mai, oct
+    // const moisBasse = reste
+    const memSaison = memJour.filter(d => {
+      const moisD = d.date.toDate().getMonth();
+      if (saison === 'haute')   return moisHaute.includes(moisD);
+      if (saison === 'moyenne') return moisMoyenne.includes(moisD);
+      return !moisHaute.includes(moisD) && !moisMoyenne.includes(moisD);
+    });
+
+    const n = memSaison.length;
+    fiabilite = n;
+
+    if (n >= 15) {
+      // 80% réel + 20% coefficients
+      const moyReelle = memSaison.reduce((s, d) => s + d.clients, 0) / n;
+      clientsMoy = Math.round(moyReelle * 0.80 + clientsCoeffs * 0.20);
+      sourceLabel = `📊 Basé sur ${n} journées réelles (fiabilité élevée)`;
+    } else if (n >= 5) {
+      // 50% réel + 50% coefficients
+      const moyReelle = memSaison.reduce((s, d) => s + d.clients, 0) / n;
+      clientsMoy = Math.round(moyReelle * 0.50 + clientsCoeffs * 0.50);
+      sourceLabel = `📈 Basé sur ${n} journées réelles + estimation (fiabilité moyenne)`;
+    } else if (n >= 1) {
+      // 20% réel + 80% coefficients
+      const moyReelle = memSaison.reduce((s, d) => s + d.clients, 0) / n;
+      clientsMoy = Math.round(moyReelle * 0.20 + clientsCoeffs * 0.80);
+      sourceLabel = `🔎 ${n} journée(s) réelle(s) disponible(s) — estimation majoritaire`;
+    }
+    // sinon on garde clientsCoeffs et le label "Estimation"
+
+  } catch(e) {
+    console.error("Erreur lecture stats:", e);
+  }
+
+  // Appliquer météo et événement sur la base pondérée
+  clientsMoy = Math.round(clientsMoy * coeffMeteo * coeffEvent);
+  const clientsMin = Math.round(clientsMoy * 0.78);
+  const clientsMax = Math.round(clientsMoy * 1.28);
+
+  prevState = { clientsMoy, clientsMin, clientsMax, pm, jourSemaine, dateStr, sourceLabel, fiabilite };
+
+  btn.textContent = "Générer les prévisions"; btn.disabled = false;
+  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite);
+}
+
+function appliquerCAManuel() {
+  const caManuel = parseFloat(document.getElementById("prevCAManuel").value);
+  if (!caManuel || caManuel <= 0) { showToast("Saisis un CA valide !", "error"); return; }
+  const pm = prevState.pm || panierMoyenGlobal || 20;
+  const clientsMoy = Math.round(caManuel / pm);
+  const clientsMin = Math.round(clientsMoy * 0.78);
+  const clientsMax = Math.round(clientsMoy * 1.28);
+  prevState = { ...prevState, clientsMoy, clientsMin, clientsMax, pm };
+  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, prevState.jourSemaine, '✏️ CA saisi manuellement', prevState.fiabilite);
+  showToast("✅ Planning recalculé sur " + formatEuro(caManuel));
+}
+
+function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite) {
   const caMin = clientsMin * pm;
   const caMoy = clientsMoy * pm;
   const caMax = clientsMax * pm;
 
-  // Afficher KPIs
-  document.getElementById("prev-ca-min").textContent = caMin.toLocaleString('fr-FR') + " €";
-  document.getElementById("prev-ca-moy").textContent = caMoy.toLocaleString('fr-FR') + " €";
-  document.getElementById("prev-ca-max").textContent = caMax.toLocaleString('fr-FR') + " €";
+  document.getElementById("prev-ca-min").textContent = formatEuro(caMin);
+  document.getElementById("prev-ca-moy").textContent = formatEuro(caMoy);
+  document.getElementById("prev-ca-max").textContent = formatEuro(caMax);
 
   const joursLabel = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][jourSemaine];
-  document.getElementById("prev-clients-info").textContent =
-    `${joursLabel} · ${clientsMin}–${clientsMax} clients estimés · Panier moyen ${pm}€`;
+  document.getElementById("prev-clients-info").innerHTML =
+    `${joursLabel} · ${clientsMin}–${clientsMax} clients estimés · Panier moyen ${pm} €<br>
+    <span style="font-size:0.75rem;margin-top:4px;display:inline-block;color:var(--aqua-light);">${sourceLabel || ''}</span>`;
 
-  // ---- PLANNING HEURE PAR HEURE ----
-  // Créneaux avec % de la fréquentation journalière
+  // ---- CRÉNEAUX HORAIRES ----
   const creneaux = [
-    { heure: "11h30", label: "Ouverture midi",   pct: 0.05 },
-    { heure: "12h00", label: "Montée midi",       pct: 0.10 },
-    { heure: "12h30", label: "Peak midi",         pct: 0.12 },
-    { heure: "13h00", label: "Peak midi",         pct: 0.10 },
-    { heure: "13h30", label: "Descente midi",     pct: 0.07 },
-    { heure: "14h00", label: "Fin midi",          pct: 0.04 },
-    { heure: "14h30", label: "Creux",             pct: 0.02 },
-    { heure: "15h00", label: "Creux",             pct: 0.02 },
-    { heure: "15h30", label: "Creux",             pct: 0.02 },
-    { heure: "16h00", label: "Creux",             pct: 0.02 },
-    { heure: "16h30", label: "Creux",             pct: 0.02 },
-    { heure: "17h00", label: "Reprise",           pct: 0.03 },
-    { heure: "17h30", label: "Reprise",           pct: 0.03 },
-    { heure: "18h00", label: "Montée soir",       pct: 0.04 },
-    { heure: "18h30", label: "Montée soir",       pct: 0.05 },
-    { heure: "19h00", label: "Montée soir",       pct: 0.06 },
-    { heure: "19h30", label: "Montée soir",       pct: 0.07 },
-    { heure: "20h00", label: "Pré-peak soir",     pct: 0.05 },
-    { heure: "20h30", label: "🔥 Peak soir",      pct: 0.06 },
-    { heure: "21h00", label: "🔥 Peak soir",      pct: 0.06 },
-    { heure: "21h30", label: "🔥 Peak soir",      pct: 0.05 },
-    { heure: "22h00", label: "Fin de service",    pct: 0.04 },
-    { heure: "22h30", label: "Fin de service",    pct: 0.03 },
-    { heure: "23h00", label: "Fermeture",         pct: 0.01 }
+    { heure: "11h30", label: "Ouverture midi",  pct: 0.04 },
+    { heure: "12h00", label: "Montée midi",      pct: 0.08 },
+    { heure: "12h30", label: "🍽️ Peak midi",    pct: 0.11 },
+    { heure: "13h00", label: "🍽️ Peak midi",    pct: 0.10 },
+    { heure: "13h30", label: "Descente midi",    pct: 0.06 },
+    { heure: "14h00", label: "Fin midi",         pct: 0.03 },
+    { heure: "14h30", label: "Creux",            pct: 0.015 },
+    { heure: "15h00", label: "Creux",            pct: 0.015 },
+    { heure: "15h30", label: "Creux",            pct: 0.01 },
+    { heure: "16h00", label: "Creux",            pct: 0.01 },
+    { heure: "16h30", label: "Creux",            pct: 0.01 },
+    { heure: "17h00", label: "Reprise",          pct: 0.02 },
+    { heure: "17h30", label: "Reprise",          pct: 0.025 },
+    { heure: "18h00", label: "Montée soir",      pct: 0.03 },
+    { heure: "18h30", label: "Montée soir",      pct: 0.04 },
+    { heure: "19h00", label: "Montée soir",      pct: 0.055 },
+    { heure: "19h30", label: "Montée soir",      pct: 0.065 },
+    { heure: "20h00", label: "Pré-peak soir",    pct: 0.07 },
+    { heure: "20h30", label: "🔥 Peak soir",     pct: 0.085 },
+    { heure: "21h00", label: "🔥 Peak soir",     pct: 0.085 },
+    { heure: "21h30", label: "🔥 Peak soir",     pct: 0.07 },
+    { heure: "22h00", label: "Fin de service",   pct: 0.04 },
+    { heure: "22h30", label: "Fin de service",   pct: 0.02 },
+    { heure: "23h00", label: "Fermeture",        pct: 0.005 }
   ];
 
-  // Calcul staff par créneau
-  // Peak complet (10 personnes) = 2 marmites + 2 friteuses + 1 remplissage + 3 salle + 2 bar
-  function calcStaff(clientsCreneau) {
-    const marmites    = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
-    const friteuses   = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
-    const remplissage = clientsCreneau >= 15 ? 1 : 0;
-    const salle       = clientsCreneau >= 30 ? 3 : clientsCreneau >= 15 ? 2 : clientsCreneau >= 5 ? 1 : 1;
-    const bar         = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
+  // ---- CALCUL STAFF ----
+  // Seuils basés sur clients sur la demi-heure
+  // Peak jour référence (300 clients / 24 créneaux ~12/créneau moyen, peak ~25/créneau)
+  function calcStaff(n) {
+    const marmites    = n >= 25 ? 2 : n >= 10 ? 1 : 0;
+    const friteuses   = n >= 25 ? 2 : n >= 10 ? 1 : 0;
+    const remplissage = n >= 18 ? 1 : 0;
+    const salle       = n >= 25 ? 3 : n >= 12 ? 2 : n >= 4 ? 1 : 1;
+    const bar         = n >= 18 ? 2 : n >= 8  ? 1 : 0;
     return { marmites, friteuses, remplissage, salle, bar,
              total: marmites + friteuses + remplissage + salle + bar };
   }
 
   const rows = creneaux.map(c => {
     const clients = Math.round(clientsMoy * c.pct);
-    const ca = clients * pm;
-    const staff = calcStaff(clients);
-    const isPeak = c.label.includes("🔥");
-    const isCreux = c.label.includes("Creux");
+    const ca      = clients * pm;
+    const staff   = calcStaff(clients);
+    const isPeak  = c.label.includes("🔥") || c.label.includes("🍽️");
+    const isCreux = c.label === "Creux";
     const rowClass = isPeak ? 'peak-row' : isCreux ? 'creux-row' : '';
 
     return `<tr class="${rowClass}">
       <td><strong>${c.heure}</strong></td>
       <td>${c.label}</td>
-      <td style="color:var(--gold)">${clients}</td>
-      <td style="color:var(--aqua)">${ca} €</td>
+      <td style="color:var(--gold);font-weight:600;">${clients}</td>
+      <td style="color:var(--aqua);">${formatEuro(ca)}</td>
       <td>
         <div class="staff-badges">
-          ${staff.marmites > 0 ? `<span class="sbadge" title="Marmites">🍲×${staff.marmites}</span>` : ''}
-          ${staff.friteuses > 0 ? `<span class="sbadge" title="Friteuses">🍟×${staff.friteuses}</span>` : ''}
-          ${staff.remplissage > 0 ? `<span class="sbadge" title="Remplissage">🔄×1</span>` : ''}
-          <span class="sbadge" title="Salle">🧑‍🍳×${staff.salle}</span>
-          ${staff.bar > 0 ? `<span class="sbadge" title="Bar">🍺×${staff.bar}</span>` : ''}
+          ${staff.marmites  > 0 ? `<span class="sbadge">🍲×${staff.marmites}</span>`  : ''}
+          ${staff.friteuses > 0 ? `<span class="sbadge">🍟×${staff.friteuses}</span>` : ''}
+          ${staff.remplissage > 0 ? `<span class="sbadge">🔄×1</span>` : ''}
+          <span class="sbadge">🧑‍🍳×${staff.salle}</span>
+          ${staff.bar > 0 ? `<span class="sbadge">🍺×${staff.bar}</span>` : ''}
           <span class="sbadge total-badge">= ${staff.total}</span>
         </div>
       </td>
@@ -813,21 +902,281 @@ function genererPrevisions() {
   }).join("");
 
   document.getElementById("planningTable").innerHTML = `
-    <table style="min-width:520px;">
-      <thead>
-        <tr>
-          <th>Heure</th>
-          <th>Créneau</th>
-          <th>Clients</th>
-          <th>CA estimé</th>
-          <th>Staff nécessaire</th>
-        </tr>
-      </thead>
+    <div class="table-wrap">
+    <table style="min-width:560px;">
+      <thead><tr>
+        <th>Heure</th><th>Créneau</th><th>Clients</th><th>CA (30 min)</th><th>Staff</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    </div>`;
 
   document.getElementById("prevResultat").style.display = "block";
   document.getElementById("prevResultat").scrollIntoView({ behavior: 'smooth' });
+}
+
+// ============================================================
+// IMPORT CSV SUMUP
+// ============================================================
+
+let importData = []; // données parsées en attente de sauvegarde
+let chartImport = null;
+
+function initImport() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById("importDate").value = today;
+
+  // Drag & drop
+  const zone = document.getElementById("dropZone");
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.style.borderColor = 'var(--gold)'; });
+  zone.addEventListener("dragleave", () => { zone.style.borderColor = 'var(--ocean-border)'; });
+  zone.addEventListener("drop", e => {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--ocean-border)';
+    const file = e.dataTransfer.files[0];
+    if (file) lireCSV(file);
+  });
+}
+
+function lireCSV(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const texte = e.target.result;
+      const tickets = parserCSVSumUp(texte);
+      if (tickets.length === 0) {
+        showToast("Aucune donnée valide trouvée dans le CSV", "error");
+        return;
+      }
+      importData = tickets;
+      afficherImport(tickets);
+      showToast(`✅ ${tickets.length} tickets chargés !`);
+    } catch(err) {
+      console.error("Erreur parsing CSV:", err);
+      showToast("❌ Format CSV non reconnu", "error");
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// Parser le format SumUp Pro export commandes
+// Colonnes : #, Date d'ouverture, Heure d'ouverture, Durée, Utilisateur, Table, Statut, Total, Statut paiement
+function parserCSVSumUp(texte) {
+  const lignes = texte.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lignes.length < 2) return [];
+
+  // Détecter le séparateur (virgule ou point-virgule)
+  const sep = lignes[0].includes(';') ? ';' : ',';
+
+  const headers = lignes[0].split(sep).map(h => h.replace(/"/g, '').toLowerCase().trim());
+  console.log("Headers CSV:", headers);
+
+  // Trouver les colonnes
+  const iHeure = headers.findIndex(h => h.includes("heure") && h.includes("ouverture") || h === "time" || h.includes("heure"));
+  const iTotal = headers.findIndex(h => h === "total" || h.includes("montant") || h.includes("ca ttc") || h.includes("amount"));
+  const iStatut = headers.findIndex(h => h.includes("statut") && h.includes("pay") || h === "payment status");
+  const iDate = headers.findIndex(h => h.includes("date"));
+
+  const tickets = [];
+  for (let i = 1; i < lignes.length; i++) {
+    const cols = lignes[i].split(sep).map(c => c.replace(/"/g, '').trim());
+    if (cols.length < 3) continue;
+
+    // Heure
+    const heureStr = iHeure >= 0 ? cols[iHeure] : cols[2];
+    const heure = extraireHeure(heureStr);
+    if (heure === null) continue;
+
+    // Total
+    const totalStr = iTotal >= 0 ? cols[iTotal] : cols[cols.length - 2];
+    const total = parseFloat(totalStr.replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (isNaN(total) || total <= 0) continue;
+
+    // Statut (garder seulement les tickets fermés/payés)
+    const statut = iStatut >= 0 ? cols[iStatut].toLowerCase() : '';
+    if (statut && (statut.includes('annul') || statut.includes('cancel'))) continue;
+
+    tickets.push({ heure, total });
+  }
+  return tickets;
+}
+
+function extraireHeure(str) {
+  if (!str) return null;
+  const match = str.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return parseInt(match[1]) + parseInt(match[2]) / 60;
+}
+
+// Générer données fictives réalistes SumUp pour tester
+function chargerDonneeTest() {
+  const ticketsFictifs = [];
+  // Distribution réaliste d'une journée samedi haute saison (~200 tickets)
+  const distribution = [
+    { h: 11.5, n: 4 },  { h: 12, n: 12 }, { h: 12.5, n: 18 }, { h: 13, n: 16 },
+    { h: 13.5, n: 10 }, { h: 14, n: 6 },  { h: 14.5, n: 3 },  { h: 15, n: 2 },
+    { h: 15.5, n: 2 },  { h: 16, n: 2 },  { h: 16.5, n: 2 },  { h: 17, n: 3 },
+    { h: 17.5, n: 4 },  { h: 18, n: 6 },  { h: 18.5, n: 8 },  { h: 19, n: 10 },
+    { h: 19.5, n: 12 }, { h: 20, n: 14 }, { h: 20.5, n: 18 }, { h: 21, n: 20 },
+    { h: 21.5, n: 16 }, { h: 22, n: 12 }, { h: 22.5, n: 8 },  { h: 23, n: 3 }
+  ];
+  // Paniers réalistes : 24.90, 28.90, 35.80 (2 formules), extras boissons
+  const paniers = [24.90, 28.90, 28.90, 35.80, 53.80, 49.80, 24.90, 28.90, 57.80, 35.80];
+  distribution.forEach(({ h, n }) => {
+    for (let i = 0; i < n; i++) {
+      const panier = paniers[Math.floor(Math.random() * paniers.length)];
+      ticketsFictifs.push({ heure: h + Math.random() * 0.45, total: panier });
+    }
+  });
+  importData = ticketsFictifs;
+  afficherImport(ticketsFictifs);
+  showToast(`🧪 ${ticketsFictifs.length} tickets fictifs chargés !`);
+}
+
+function afficherImport(tickets) {
+  const totalCA = tickets.reduce((s, t) => s + t.total, 0);
+  const panierMoy = totalCA / tickets.length;
+
+  // KPIs
+  document.getElementById("imp-tickets").textContent = tickets.length;
+  document.getElementById("imp-ca").textContent = formatEuro(totalCA);
+  document.getElementById("imp-moy").textContent = formatEuro(panierMoy);
+
+  // Regrouper par créneau de 30 min
+  const creneaux = {};
+  for (let h = 11; h <= 23; h++) {
+    creneaux[h + '.0'] = { label: `${h}h00`, tickets: 0, ca: 0 };
+    creneaux[h + '.5'] = { label: `${h}h30`, tickets: 0, ca: 0 };
+  }
+
+  tickets.forEach(t => {
+    const demi = t.heure >= 0 ? (Math.floor(t.heure * 2) / 2).toFixed(1) : null;
+    if (demi && creneaux[demi]) {
+      creneaux[demi].tickets++;
+      creneaux[demi].ca += t.total;
+    }
+  });
+
+  // Filtrer les créneaux vides en début/fin
+  const cles = Object.keys(creneaux).filter(k => creneaux[k].tickets > 0 ||
+    (parseFloat(k) >= 11.5 && parseFloat(k) <= 23.0));
+
+  // Date
+  const dateInput = document.getElementById("importDate").value;
+  document.getElementById("imp-date").textContent = dateInput ?
+    new Date(dateInput + "T12:00:00").toLocaleDateString('fr-FR') : "—";
+
+  // Graphique
+  const labelsChart = cles.map(k => creneaux[k].label);
+  const dataTickets = cles.map(k => creneaux[k].tickets);
+  const dataCA = cles.map(k => Math.round(creneaux[k].ca));
+
+  if (chartImport) chartImport.destroy();
+  const ctx = document.getElementById("chartImport").getContext("2d");
+  chartImport = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labelsChart,
+      datasets: [
+        {
+          label: 'Tickets',
+          data: dataTickets,
+          backgroundColor: 'rgba(201,168,76,0.7)',
+          yAxisID: 'y'
+        },
+        {
+          label: 'CA (€)',
+          data: dataCA,
+          type: 'line',
+          borderColor: '#4ab5e3',
+          backgroundColor: 'transparent',
+          tension: 0.4,
+          yAxisID: 'y1',
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#c9d6e3', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8aa0b5', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y:  { position: 'left',  ticks: { color: '#c9a84c' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y1: { position: 'right', ticks: { color: '#4ab5e3' }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Tableau détail
+  const rows = cles.map(k => {
+    const c = creneaux[k];
+    const pct = tickets.length > 0 ? ((c.tickets / tickets.length) * 100).toFixed(1) : 0;
+    const barWidth = Math.round(parseFloat(pct) * 2);
+    const isPeak = c.tickets >= Math.max(...Object.values(creneaux).map(x => x.tickets)) * 0.7;
+    return `<tr ${isPeak ? 'class="peak-row"' : ''}>
+      <td><strong>${c.label}</strong></td>
+      <td style="color:var(--gold)">${c.tickets}</td>
+      <td style="color:var(--aqua)">${formatEuro(c.ca)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="width:${barWidth}px;height:6px;background:var(--gold);border-radius:3px;opacity:0.7;"></div>
+          <span style="font-size:0.75rem;color:var(--text-secondary)">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("importTable").innerHTML = rows;
+  document.getElementById("importResultat").style.display = "block";
+  document.getElementById("importResultat").scrollIntoView({ behavior: 'smooth' });
+}
+
+async function sauvegarderImport() {
+  if (!importData.length) { showToast("Aucune donnée à sauvegarder", "error"); return; }
+
+  const dateStr = document.getElementById("importDate").value;
+  if (!dateStr) { showToast("Sélectionne une date !", "error"); return; }
+
+  const btn = document.querySelector("#tab-import .btn-primary");
+  btn.textContent = "Sauvegarde..."; btn.disabled = true;
+
+  try {
+    // Regrouper par créneau 30 min
+    const creneaux = {};
+    importData.forEach(t => {
+      const demi = (Math.floor(t.heure * 2) / 2).toFixed(1);
+      if (!creneaux[demi]) creneaux[demi] = { tickets: 0, ca: 0 };
+      creneaux[demi].tickets++;
+      creneaux[demi].ca += t.total;
+    });
+
+    const totalCA    = importData.reduce((s, t) => s + t.total, 0);
+    const totalTick  = importData.length;
+    const panierMoy  = totalCA / totalTick;
+    const jourSemaine = new Date(dateStr + "T12:00:00").getDay();
+
+    await db.collection("imports_caisse").add({
+      date: new Date(dateStr + "T12:00:00"),
+      dateStr,
+      jourSemaine,
+      totalCA,
+      totalTickets: totalTick,
+      panierMoyen: parseFloat(panierMoy.toFixed(2)),
+      creneaux,
+      source: "SumUp CSV"
+    });
+
+    showToast("✅ Données sauvegardées ! Les prévisions s'améliorent.");
+    importData = [];
+
+  } catch(e) {
+    console.error("Erreur sauvegarde import:", e);
+    showToast("❌ " + (e.message || "Erreur sauvegarde"), "error");
+  }
+
+  btn.textContent = "💾 Sauvegarder et alimenter les prévisions";
+  btn.disabled = false;
 }
 
 // ============================================================
