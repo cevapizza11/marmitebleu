@@ -71,6 +71,9 @@
     <button class="nav-btn" id="nav-avis" onclick="showTab('avis')">
       ⭐ Avis Google
     </button>
+    <button class="nav-btn" id="nav-previsions" onclick="showTab('previsions')">
+      📅 Prévisions
+    </button>
     <button class="nav-btn" id="nav-reglages" onclick="showTab('reglages')">
       ⚙️ Réglages
     </button>
@@ -126,7 +129,7 @@
               <tr>
                 <th>Date</th>
                 <th>Clients</th>
-                <th>Note</th>
+                <th>Transactions</th>
                 <th>Attente</th>
                 <th>Moules</th>
                 <th>CA réel</th>
@@ -164,8 +167,8 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Note Google /5</label>
-              <input id="note" type="number" step="0.1" placeholder="ex : 4.3" min="0" max="5">
+              <label>Transactions (tickets caisse)</label>
+              <input id="note" type="number" step="1" placeholder="ex : 78" min="0">
             </div>
             <div class="form-group">
               <label>Attente (min)</label>
@@ -330,6 +333,84 @@
 
     </div>
 
+    <!-- ====== TAB PRÉVISIONS ====== -->
+    <div class="tab-content" id="tab-previsions">
+
+      <div class="card">
+        <div class="card-title">📅 Générer les prévisions</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date à prévoir</label>
+            <input id="prevDate" type="date">
+          </div>
+          <div class="form-group">
+            <label>Saison</label>
+            <select id="prevSaison" style="width:100%;padding:11px 14px;background:var(--ocean-mid);border:1px solid var(--ocean-border);border-radius:8px;color:var(--text-primary);font-size:0.88rem;">
+              <option value="haute">Haute saison (Juil-Août)</option>
+              <option value="moyenne" selected>Moyenne saison (Juin/Sept)</option>
+              <option value="basse">Basse saison (Oct-Mai)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Météo prévue</label>
+            <select id="prevMeteo" style="width:100%;padding:11px 14px;background:var(--ocean-mid);border:1px solid var(--ocean-border);border-radius:8px;color:var(--text-primary);font-size:0.88rem;">
+              <option value="mauvais">☁️ Mauvais temps (boost)</option>
+              <option value="nuageux" selected>⛅ Nuageux / mitigé</option>
+              <option value="beau">☀️ Beau temps</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Événement local ?</label>
+            <select id="prevEvent" style="width:100%;padding:11px 14px;background:var(--ocean-mid);border:1px solid var(--ocean-border);border-radius:8px;color:var(--text-primary);font-size:0.88rem;">
+              <option value="non" selected>Aucun</option>
+              <option value="marche">Marché / fête locale</option>
+              <option value="concert">Concert / événement</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" onclick="genererPrevisions()" style="margin-top:8px;">
+          Générer les prévisions
+        </button>
+      </div>
+
+      <!-- Résultat prévisions -->
+      <div id="prevResultat" style="display:none;">
+
+        <div class="card">
+          <div class="card-title">💶 CA prévisionnel de la journée</div>
+          <div class="kpi-grid" style="grid-template-columns:1fr 1fr 1fr;">
+            <div class="kpi-card">
+              <div class="kpi-value" id="prev-ca-min" style="color:var(--danger);font-size:1.3rem;">—</div>
+              <div class="kpi-label">Pessimiste</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-value" id="prev-ca-moy" style="color:var(--gold);font-size:1.3rem;">—</div>
+              <div class="kpi-label">Réaliste</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-value" id="prev-ca-max" style="color:var(--success);font-size:1.3rem;">—</div>
+              <div class="kpi-label">Optimiste</div>
+            </div>
+          </div>
+          <div style="text-align:center;margin-top:8px;">
+            <span id="prev-clients-info" style="font-size:0.8rem;color:var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">⏰ Planning heure par heure</div>
+          <div id="planningTable"></div>
+        </div>
+
+      </div>
+
+    </div>
+
     <!-- ====== TAB RÉGLAGES ====== -->
     <div class="tab-content" id="tab-reglages">
 
@@ -372,6 +453,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="app.js?v=10.6"></script>
+<script src="app.js?v=10.7"></script>
 </body>
 </html>

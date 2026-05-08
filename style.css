@@ -616,3 +616,26 @@ canvas { max-height: 220px; }
   height: 1px;
   background: var(--ocean-border);
 }
+
+/* ============================================================
+   PRÉVISIONS
+   ============================================================ */
+.peak-row td { background: rgba(201,168,76,0.07); }
+.creux-row td { background: rgba(255,255,255,0.01); opacity: 0.7; }
+
+.staff-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sbadge {
+  background: rgba(74,181,227,0.12);
+  color: var(--aqua-light);
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  border: 1px solid rgba(74,181,227,0.2);
+  white-space: nowrap;
+}
+.total-badge {
+  background: rgba(201,168,76,0.15);
+  color: var(--gold);
+  border-color: rgba(201,168,76,0.3);
+  font-weight: 700;
+}

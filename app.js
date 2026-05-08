@@ -32,6 +32,7 @@ function showTab(tab) {
   if (tab === 'dashboard') chargerDashboard();
   if (tab === 'avis') chargerAvis();
   if (tab === 'reglages') chargerReglages();
+  if (tab === 'previsions') initPrevisions();
 }
 
 // ============================================================
@@ -680,6 +681,155 @@ async function chargerAvis() {
 }
 
 // ============================================================
+// ============================================================
+// PRÉVISIONS
+// ============================================================
+
+function initPrevisions() {
+  // Pré-remplir la date avec aujourd'hui
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById("prevDate").value = today;
+}
+
+function genererPrevisions() {
+  const dateStr = document.getElementById("prevDate").value;
+  const saison   = document.getElementById("prevSaison").value;
+  const meteo    = document.getElementById("prevMeteo").value;
+  const event    = document.getElementById("prevEvent").value;
+
+  if (!dateStr) { showToast("Sélectionne une date !", "error"); return; }
+
+  const date = new Date(dateStr);
+  const jourSemaine = date.getDay(); // 0=dim, 1=lun ... 6=sam
+
+  // ---- COEFFICIENTS JOUR ----
+  // Base = réaliste jour moyen (coeff 1.0)
+  const coeffJour = {
+    0: 1.3,  // dimanche
+    1: 0.6,  // lundi
+    2: 0.65, // mardi
+    3: 0.7,  // mercredi
+    4: 0.85, // jeudi
+    5: 1.1,  // vendredi
+    6: 1.4   // samedi
+  }[jourSemaine] || 1.0;
+
+  // ---- COEFFICIENTS SAISON ----
+  const coeffSaison = { haute: 1.5, moyenne: 1.0, basse: 0.55 }[saison];
+
+  // ---- COEFFICIENTS MÉTÉO ----
+  // Mauvais temps = plus de monde (restaurant de bord de mer couvert)
+  const coeffMeteo = { mauvais: 1.2, nuageux: 1.0, beau: 0.85 }[meteo];
+
+  // ---- COEFFICIENTS ÉVÉNEMENT ----
+  const coeffEvent = { non: 1.0, marche: 1.25, concert: 1.35 }[event];
+
+  // ---- BASE CLIENTS & CA ----
+  // Base réaliste saison moyenne, jour moyen = 80 clients
+  const baseClients = 80;
+  const clientsMoy = Math.round(baseClients * coeffJour * coeffSaison * coeffMeteo * coeffEvent);
+  const clientsMin = Math.round(clientsMoy * 0.75);
+  const clientsMax = Math.round(clientsMoy * 1.25);
+
+  const pm = panierMoyenGlobal || 20;
+  const caMin = clientsMin * pm;
+  const caMoy = clientsMoy * pm;
+  const caMax = clientsMax * pm;
+
+  // Afficher KPIs
+  document.getElementById("prev-ca-min").textContent = caMin.toLocaleString('fr-FR') + " €";
+  document.getElementById("prev-ca-moy").textContent = caMoy.toLocaleString('fr-FR') + " €";
+  document.getElementById("prev-ca-max").textContent = caMax.toLocaleString('fr-FR') + " €";
+
+  const joursLabel = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"][jourSemaine];
+  document.getElementById("prev-clients-info").textContent =
+    `${joursLabel} · ${clientsMin}–${clientsMax} clients estimés · Panier moyen ${pm}€`;
+
+  // ---- PLANNING HEURE PAR HEURE ----
+  // Créneaux avec % de la fréquentation journalière
+  const creneaux = [
+    { heure: "11h30", label: "Ouverture midi",   pct: 0.05 },
+    { heure: "12h00", label: "Montée midi",       pct: 0.10 },
+    { heure: "12h30", label: "Peak midi",         pct: 0.12 },
+    { heure: "13h00", label: "Peak midi",         pct: 0.10 },
+    { heure: "13h30", label: "Descente midi",     pct: 0.07 },
+    { heure: "14h00", label: "Fin midi",          pct: 0.04 },
+    { heure: "14h30", label: "Creux",             pct: 0.02 },
+    { heure: "15h00", label: "Creux",             pct: 0.02 },
+    { heure: "15h30", label: "Creux",             pct: 0.02 },
+    { heure: "16h00", label: "Creux",             pct: 0.02 },
+    { heure: "16h30", label: "Creux",             pct: 0.02 },
+    { heure: "17h00", label: "Reprise",           pct: 0.03 },
+    { heure: "17h30", label: "Reprise",           pct: 0.03 },
+    { heure: "18h00", label: "Montée soir",       pct: 0.04 },
+    { heure: "18h30", label: "Montée soir",       pct: 0.05 },
+    { heure: "19h00", label: "Montée soir",       pct: 0.06 },
+    { heure: "19h30", label: "Montée soir",       pct: 0.07 },
+    { heure: "20h00", label: "Pré-peak soir",     pct: 0.05 },
+    { heure: "20h30", label: "🔥 Peak soir",      pct: 0.06 },
+    { heure: "21h00", label: "🔥 Peak soir",      pct: 0.06 },
+    { heure: "21h30", label: "🔥 Peak soir",      pct: 0.05 },
+    { heure: "22h00", label: "Fin de service",    pct: 0.04 },
+    { heure: "22h30", label: "Fin de service",    pct: 0.03 },
+    { heure: "23h00", label: "Fermeture",         pct: 0.01 }
+  ];
+
+  // Calcul staff par créneau
+  // Peak complet (10 personnes) = 2 marmites + 2 friteuses + 1 remplissage + 3 salle + 2 bar
+  function calcStaff(clientsCreneau) {
+    const marmites    = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
+    const friteuses   = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
+    const remplissage = clientsCreneau >= 15 ? 1 : 0;
+    const salle       = clientsCreneau >= 30 ? 3 : clientsCreneau >= 15 ? 2 : clientsCreneau >= 5 ? 1 : 1;
+    const bar         = clientsCreneau >= 20 ? 2 : clientsCreneau >= 8 ? 1 : 0;
+    return { marmites, friteuses, remplissage, salle, bar,
+             total: marmites + friteuses + remplissage + salle + bar };
+  }
+
+  const rows = creneaux.map(c => {
+    const clients = Math.round(clientsMoy * c.pct);
+    const ca = clients * pm;
+    const staff = calcStaff(clients);
+    const isPeak = c.label.includes("🔥");
+    const isCreux = c.label.includes("Creux");
+    const rowClass = isPeak ? 'peak-row' : isCreux ? 'creux-row' : '';
+
+    return `<tr class="${rowClass}">
+      <td><strong>${c.heure}</strong></td>
+      <td>${c.label}</td>
+      <td style="color:var(--gold)">${clients}</td>
+      <td style="color:var(--aqua)">${ca} €</td>
+      <td>
+        <div class="staff-badges">
+          ${staff.marmites > 0 ? `<span class="sbadge" title="Marmites">🍲×${staff.marmites}</span>` : ''}
+          ${staff.friteuses > 0 ? `<span class="sbadge" title="Friteuses">🍟×${staff.friteuses}</span>` : ''}
+          ${staff.remplissage > 0 ? `<span class="sbadge" title="Remplissage">🔄×1</span>` : ''}
+          <span class="sbadge" title="Salle">🧑‍🍳×${staff.salle}</span>
+          ${staff.bar > 0 ? `<span class="sbadge" title="Bar">🍺×${staff.bar}</span>` : ''}
+          <span class="sbadge total-badge">= ${staff.total}</span>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("planningTable").innerHTML = `
+    <table style="min-width:520px;">
+      <thead>
+        <tr>
+          <th>Heure</th>
+          <th>Créneau</th>
+          <th>Clients</th>
+          <th>CA estimé</th>
+          <th>Staff nécessaire</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById("prevResultat").style.display = "block";
+  document.getElementById("prevResultat").scrollIntoView({ behavior: 'smooth' });
+}
+
 // ============================================================
 // RÉGLAGES
 // ============================================================
