@@ -862,37 +862,60 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
     { heure: "23h00", label: "Fermeture",        pct: 0.005 }
   ];
 
-  // ---- CALCUL STAFF ----
-  // Seuils basés sur clients sur la demi-heure
-  // Peak jour référence (300 clients / 24 créneaux ~12/créneau moyen, peak ~25/créneau)
-  function calcStaff(n) {
-    const marmites    = n >= 25 ? 2 : n >= 10 ? 1 : 0;
-    const friteuses   = n >= 25 ? 2 : n >= 10 ? 1 : 0;
-    const remplissage = n >= 18 ? 1 : 0;
-    const salle       = n >= 25 ? 3 : n >= 12 ? 2 : n >= 4 ? 1 : 1;
-    const bar         = n >= 18 ? 2 : n >= 8  ? 1 : 0;
+  // ---- PRÉ-CALCUL ARRIVÉES PAR CRÉNEAU ----
+  const arrivees = creneaux.map(c => Math.round(clientsMoy * c.pct));
+  const totalArrivees = arrivees.reduce((s, n) => s + n, 0);
+
+  // ---- CALCUL CLIENTS EN SALLE (durée repas = 1h30 = 3 créneaux de 30 min) ----
+  const DUREE_REPAS = 3; // créneaux de 30 min
+  const enSalle = arrivees.map((_, i) => {
+    let cumul = 0;
+    for (let j = Math.max(0, i - DUREE_REPAS + 1); j <= i; j++) {
+      cumul += arrivees[j];
+    }
+    return cumul;
+  });
+  const maxEnSalle = Math.max(...enSalle);
+
+  // ---- CALCUL STAFF (basé sur clients EN SALLE = charge réelle) ----
+  function calcStaff(nSalle) {
+    const marmites    = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
+    const friteuses   = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
+    const remplissage = nSalle >= 40 ? 1 : 0;
+    const salle       = nSalle >= 60 ? 3 : nSalle >= 30 ? 2 : nSalle >= 10 ? 1 : 1;
+    const bar         = nSalle >= 50 ? 2 : nSalle >= 20 ? 1 : 0;
     return { marmites, friteuses, remplissage, salle, bar,
              total: marmites + friteuses + remplissage + salle + bar };
   }
 
-  const rows = creneaux.map(c => {
-    const clients = Math.round(clientsMoy * c.pct);
-    const ca      = clients * pm;
-    const staff   = calcStaff(clients);
+  const rows = creneaux.map((c, i) => {
+    const arrive  = arrivees[i];
+    const salle   = enSalle[i];
+    const ca      = arrive * pm;
+    const staff   = calcStaff(salle);
     const isPeak  = c.label.includes("🔥") || c.label.includes("🍽️");
     const isCreux = c.label === "Creux";
     const rowClass = isPeak ? 'peak-row' : isCreux ? 'creux-row' : '';
+    // Barre visuelle charge salle
+    const pctSalle = maxEnSalle > 0 ? Math.round((salle / maxEnSalle) * 100) : 0;
+    const barColor = pctSalle >= 85 ? 'var(--danger)' : pctSalle >= 60 ? 'var(--warning)' : 'var(--success)';
 
     return `<tr class="${rowClass}">
       <td><strong>${c.heure}</strong></td>
       <td>${c.label}</td>
-      <td style="color:var(--gold);font-weight:600;">${clients}</td>
-      <td style="color:var(--aqua);">${formatEuro(ca)}</td>
+      <td style="color:var(--gold);font-weight:600;text-align:center;">${arrive}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="width:${pctSalle * 0.5}px;height:6px;background:${barColor};border-radius:3px;min-width:2px;max-width:50px;"></div>
+          <span style="color:var(--aqua-light);font-weight:600;">${salle}</span>
+        </div>
+      </td>
+      <td style="color:var(--aqua);font-size:0.8rem;">${formatEuro(ca)}</td>
       <td>
         <div class="staff-badges">
-          ${staff.marmites  > 0 ? `<span class="sbadge">🍲×${staff.marmites}</span>`  : ''}
-          ${staff.friteuses > 0 ? `<span class="sbadge">🍟×${staff.friteuses}</span>` : ''}
-          ${staff.remplissage > 0 ? `<span class="sbadge">🔄×1</span>` : ''}
+          ${staff.marmites    > 0 ? `<span class="sbadge">🍲×${staff.marmites}</span>`  : ''}
+          ${staff.friteuses   > 0 ? `<span class="sbadge">🍟×${staff.friteuses}</span>` : ''}
+          ${staff.remplissage > 0 ? `<span class="sbadge">🔄×1</span>`                  : ''}
           <span class="sbadge">🧑‍🍳×${staff.salle}</span>
           ${staff.bar > 0 ? `<span class="sbadge">🍺×${staff.bar}</span>` : ''}
           <span class="sbadge total-badge">= ${staff.total}</span>
@@ -903,11 +926,30 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
 
   document.getElementById("planningTable").innerHTML = `
     <div class="table-wrap">
-    <table style="min-width:560px;">
+    <table style="min-width:620px;">
       <thead><tr>
-        <th>Heure</th><th>Créneau</th><th>Clients</th><th>CA (30 min)</th><th>Staff</th>
+        <th>Heure</th>
+        <th>Créneau</th>
+        <th style="text-align:center;">🚪 Arrivées</th>
+        <th>🪑 En salle</th>
+        <th>CA (30 min)</th>
+        <th>Staff nécessaire</th>
       </tr></thead>
       <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="border-top:2px solid var(--ocean-border);">
+          <td colspan="2" style="color:var(--text-secondary);font-size:0.8rem;padding-top:10px;">
+            <em>Durée repas estimée : 1h30 — Staff calculé sur clients en salle</em>
+          </td>
+          <td style="text-align:center;padding-top:10px;">
+            <span class="sbadge total-badge" style="font-size:0.85rem;">= ${totalArrivees}</span>
+          </td>
+          <td style="padding-top:10px;">
+            <span style="font-size:0.75rem;color:var(--text-muted);">max : ${maxEnSalle}</span>
+          </td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
     </table>
     </div>`;
 
