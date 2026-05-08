@@ -842,13 +842,13 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
     { heure: "13h00", label: "🍽️ Peak midi",    pct: 0.10 },
     { heure: "13h30", label: "Descente midi",    pct: 0.06 },
     { heure: "14h00", label: "Fin midi",         pct: 0.03 },
-    { heure: "14h30", label: "Creux",            pct: 0.015 },
-    { heure: "15h00", label: "Creux",            pct: 0.015 },
-    { heure: "15h30", label: "Creux",            pct: 0.01 },
-    { heure: "16h00", label: "Creux",            pct: 0.01 },
-    { heure: "16h30", label: "Creux",            pct: 0.01 },
-    { heure: "17h00", label: "Reprise",          pct: 0.02 },
-    { heure: "17h30", label: "Reprise",          pct: 0.025 },
+    { heure: "14h30", label: "Snack",            pct: 0.015, snack: true },
+    { heure: "15h00", label: "Snack",            pct: 0.020, snack: true },
+    { heure: "15h30", label: "🏖️ Peak snack",   pct: 0.025, snack: true },
+    { heure: "16h00", label: "🏖️ Peak snack",   pct: 0.025, snack: true },
+    { heure: "16h30", label: "Snack",            pct: 0.020, snack: true },
+    { heure: "17h00", label: "Snack / Reprise",  pct: 0.015, snack: true },
+    { heure: "17h30", label: "Reprise resto",    pct: 0.025 },
     { heure: "18h00", label: "Montée soir",      pct: 0.03 },
     { heure: "18h30", label: "Montée soir",      pct: 0.04 },
     { heure: "19h00", label: "Montée soir",      pct: 0.055 },
@@ -862,23 +862,46 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
     { heure: "23h00", label: "Fermeture",        pct: 0.005 }
   ];
 
-  // ---- PRÉ-CALCUL ARRIVÉES PAR CRÉNEAU ----
-  const arrivees = creneaux.map(c => Math.round(clientsMoy * c.pct));
-  const totalArrivees = arrivees.reduce((s, n) => s + n, 0);
+  // ---- PANIER MOYEN PAR MODE DE SERVICE ----
+  const pmResto   = pm;          // moules : panier moyen réglages (ex: 24-28€)
+  const pmSnack   = pm * 0.55;   // snacking : ~55% du panier resto (fish/nuggets/boissons)
 
-  // ---- CALCUL CLIENTS EN SALLE (durée repas = 1h30 = 3 créneaux de 30 min) ----
-  const DUREE_REPAS = 3; // créneaux de 30 min
+  // ---- PRÉ-CALCUL ARRIVÉES PAR CRÉNEAU ----
+  const arrivees = creneaux.map(c => Math.round(
+    c.snack ? clientsMoy * c.pct * 0.40 // snacking = 40% de la fréquentation resto
+            : clientsMoy * c.pct
+  ));
+  const totalArrivees     = arrivees.reduce((s, n) => s + n, 0);
+  const totalArriveesResto = creneaux.reduce((s, c, i) => s + (!c.snack ? arrivees[i] : 0), 0);
+  const totalArriveesSnack = creneaux.reduce((s, c, i) => s + ( c.snack ? arrivees[i] : 0), 0);
+
+  // ---- CALCUL CLIENTS EN SALLE ----
+  // Resto : durée repas 1h30 = 3 créneaux
+  // Snacking : durée 20 min = 1 créneau (rotation rapide)
   const enSalle = arrivees.map((_, i) => {
+    const duree = creneaux[i].snack ? 1 : 3;
     let cumul = 0;
-    for (let j = Math.max(0, i - DUREE_REPAS + 1); j <= i; j++) {
-      cumul += arrivees[j];
-    }
+    for (let j = Math.max(0, i - duree + 1); j <= i; j++) cumul += arrivees[j];
     return cumul;
   });
   const maxEnSalle = Math.max(...enSalle);
 
-  // ---- CALCUL STAFF (basé sur clients EN SALLE = charge réelle) ----
-  function calcStaff(nSalle) {
+  // ---- CALCUL CA PAR CRÉNEAU ----
+  const caParCreneau = creneaux.map((c, i) => arrivees[i] * (c.snack ? pmSnack : pmResto));
+  const caTotalResto = creneaux.reduce((s, c, i) => s + (!c.snack ? caParCreneau[i] : 0), 0);
+  const caTotalSnack = creneaux.reduce((s, c, i) => s + ( c.snack ? caParCreneau[i] : 0), 0);
+
+  // ---- CALCUL STAFF ----
+  function calcStaff(nSalle, isSnack) {
+    if (isSnack) {
+      // Mode snacking : staff minimum 3 quelle que soit l'affluence
+      const friteuses   = 1; // toujours 1 friteuse
+      const salleSnack  = nSalle >= 20 ? 2 : 1;
+      const bar         = 1; // toujours 1 bar
+      return { marmites:0, friteuses, remplissage:0, salle:salleSnack, bar,
+               total: friteuses + salleSnack + bar };
+    }
+    // Mode restaurant
     const marmites    = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
     const friteuses   = nSalle >= 60 ? 2 : nSalle >= 25 ? 1 : 0;
     const remplissage = nSalle >= 40 ? 1 : 0;
@@ -889,24 +912,26 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
   }
 
   const rows = creneaux.map((c, i) => {
-    const arrive  = arrivees[i];
-    const salle   = enSalle[i];
-    const ca      = arrive * pm;
-    const staff   = calcStaff(salle);
-    const isPeak  = c.label.includes("🔥") || c.label.includes("🍽️");
-    const isCreux = c.label === "Creux";
-    const rowClass = isPeak ? 'peak-row' : isCreux ? 'creux-row' : '';
-    // Barre visuelle charge salle
+    const arrive   = arrivees[i];
+    const salle    = enSalle[i];
+    const ca       = caParCreneau[i];
+    const staff    = calcStaff(salle, c.snack);
+    const isPeak   = c.label.includes("🔥") || c.label.includes("🍽️");
+    const isCreux  = c.label === "Creux";
+    const rowClass = c.snack ? 'snack-row' : isPeak ? 'peak-row' : isCreux ? 'creux-row' : '';
     const pctSalle = maxEnSalle > 0 ? Math.round((salle / maxEnSalle) * 100) : 0;
     const barColor = pctSalle >= 85 ? 'var(--danger)' : pctSalle >= 60 ? 'var(--warning)' : 'var(--success)';
+    const modeTag  = c.snack
+      ? `<span class="mode-snack">🍟 Snacking</span>`
+      : `<span class="mode-resto">🦪 Resto</span>`;
 
     return `<tr class="${rowClass}">
       <td><strong>${c.heure}</strong></td>
-      <td>${c.label}</td>
+      <td>${c.label} ${modeTag}</td>
       <td style="color:var(--gold);font-weight:600;text-align:center;">${arrive}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;">
-          <div style="width:${pctSalle * 0.5}px;height:6px;background:${barColor};border-radius:3px;min-width:2px;max-width:50px;"></div>
+          <div style="width:${pctSalle*0.5}px;height:6px;background:${barColor};border-radius:3px;min-width:2px;max-width:50px;"></div>
           <span style="color:var(--aqua-light);font-weight:600;">${salle}</span>
         </div>
       </td>
@@ -926,7 +951,7 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
 
   document.getElementById("planningTable").innerHTML = `
     <div class="table-wrap">
-    <table style="min-width:620px;">
+    <table style="min-width:640px;">
       <thead><tr>
         <th>Heure</th>
         <th>Créneau</th>
@@ -938,14 +963,26 @@ function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jou
       <tbody>${rows}</tbody>
       <tfoot>
         <tr style="border-top:2px solid var(--ocean-border);">
-          <td colspan="2" style="color:var(--text-secondary);font-size:0.8rem;padding-top:10px;">
-            <em>Durée repas estimée : 1h30 — Staff calculé sur clients en salle</em>
+          <td colspan="2" style="padding-top:12px;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <span class="mode-resto" style="font-size:0.72rem;">🦪 Resto : durée repas 1h30</span>
+              <span class="mode-snack" style="font-size:0.72rem;">🍟 Snacking : rotation 20 min, staff mini 3</span>
+            </div>
           </td>
-          <td style="text-align:center;padding-top:10px;">
-            <span class="sbadge total-badge" style="font-size:0.85rem;">= ${totalArrivees}</span>
+          <td style="text-align:center;padding-top:12px;">
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+              <span class="sbadge total-badge">= ${totalArrivees}</span>
+              <span style="font-size:0.68rem;color:var(--text-muted);">${totalArriveesResto} resto / ${totalArriveesSnack} snack</span>
+            </div>
           </td>
-          <td style="padding-top:10px;">
+          <td style="padding-top:12px;">
             <span style="font-size:0.75rem;color:var(--text-muted);">max : ${maxEnSalle}</span>
+          </td>
+          <td style="padding-top:12px;">
+            <div style="display:flex;flex-direction:column;gap:2px;">
+              <span style="font-size:0.72rem;color:var(--gold);">${formatEuro(caTotalResto)} resto</span>
+              <span style="font-size:0.72rem;color:var(--success);">${formatEuro(caTotalSnack)} snack</span>
+            </div>
           </td>
           <td colspan="2"></td>
         </tr>
