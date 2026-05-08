@@ -802,10 +802,10 @@ async function genererPrevisions() {
   const clientsMin = Math.round(clientsMoy * 0.78);
   const clientsMax = Math.round(clientsMoy * 1.28);
 
-  prevState = { clientsMoy, clientsMin, clientsMax, pm, jourSemaine, dateStr, sourceLabel, fiabilite };
+  prevState = { clientsMoy, clientsMin, clientsMax, pm, jourSemaine, dateStr, sourceLabel, fiabilite, coeffJour, coeffSaison, coeffMeteo, coeffEvent };
 
   btn.textContent = "Générer les prévisions"; btn.disabled = false;
-  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite);
+  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite, coeffJour, coeffSaison, coeffMeteo, coeffEvent);
 }
 
 function appliquerCAManuel() {
@@ -816,11 +816,17 @@ function appliquerCAManuel() {
   const clientsMin = Math.round(clientsMoy * 0.78);
   const clientsMax = Math.round(clientsMoy * 1.28);
   prevState = { ...prevState, clientsMoy, clientsMin, clientsMax, pm };
-  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, prevState.jourSemaine, '✏️ CA saisi manuellement', prevState.fiabilite);
+  const { coeffJour:cJ, coeffSaison:cS, coeffMeteo:cM, coeffEvent:cE } = prevState;
+  afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, prevState.jourSemaine, '✏️ CA saisi manuellement', prevState.fiabilite, cJ||1, cS||1, cM||1, cE||1);
   showToast("✅ Planning recalculé sur " + formatEuro(caManuel));
 }
 
-function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite) {
+function afficherResultatsPrevisions(clientsMoy, clientsMin, clientsMax, pm, jourSemaine, sourceLabel, fiabilite, coeffJour, coeffSaison, coeffMeteo, coeffEvent) {
+  // Valeurs par défaut si appelé sans coefficients
+  coeffJour   = coeffJour   || 1;
+  coeffSaison = coeffSaison || 1;
+  coeffMeteo  = coeffMeteo  || 1;
+  coeffEvent  = coeffEvent  || 1;
   const caMin = clientsMin * pm;
   const caMoy = clientsMoy * pm;
   const caMax = clientsMax * pm;
